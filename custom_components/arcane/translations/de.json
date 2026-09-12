@@ -35,12 +35,42 @@
       "cannot_connect": "Verbindung zu Arcane fehlgeschlagen. Prüfe die URL und ob die Instanz erreichbar ist.",
       "invalid_auth": "Arcane hat den API-Key abgelehnt.",
       "insufficient_permissions": "Dem API-Key fehlt die Berechtigung environments:list.",
-      "unknown": "Unerwarteter Fehler"
+      "unknown": "Unerwarteter Fehler",
+      "invalid_url": "Das ist keine gültige http:// oder https:// Adresse."
     },
     "abort": {
       "already_configured": "Diese Arcane-Instanz ist bereits eingerichtet.",
       "reauth_successful": "Erneute Anmeldung erfolgreich",
       "reconfigure_successful": "Neukonfiguration erfolgreich"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Arcane Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall",
+          "environments": "Environments",
+          "monitor_containers": "Container",
+          "monitor_projects": "Compose Projekte",
+          "monitor_resources": "Images, Volumes und Netzwerke",
+          "update_entities": "Update Entitäten für Images",
+          "allow_control": "Steuerung aus Home Assistant erlauben",
+          "include_internal": "Interne Container einbeziehen",
+          "include_hidden": "Versteckte Container einbeziehen"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft Arcane abgefragt wird, in Sekunden.",
+          "environments": "Leer lassen, um allen Environments von Arcane zu folgen.",
+          "monitor_containers": "Für jeden Container ein Gerät mit Entitäten anlegen.",
+          "monitor_projects": "Für jedes Compose Projekt ein Gerät mit Entitäten anlegen.",
+          "monitor_resources": "Image, Volume und Netzwerk Zähler sowie die Docker Version abfragen.",
+          "update_entities": "Pro Container eine Update Entität anbieten, die per Redeploy auf das neuere Image wechselt.",
+          "allow_control": "Ausschalten für einen reinen Lesebetrieb: keine Schalter, Buttons oder Update Installationen.",
+          "include_internal": "Auch Container einbeziehen, die Arcane als intern markiert.",
+          "include_hidden": "Auch Container einbeziehen, die in der Arcane Oberfläche versteckt sind."
+        }
+      }
     }
   },
   "entity": {
@@ -154,6 +184,11 @@
       "services_total": {
         "name": "Services",
         "unit_of_measurement": "Services"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image Update"
       }
     }
   },

@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ArcaneConfigEntry
 from .api import ArcaneError
-from .const import DOMAIN
+from .const import CONF_ALLOW_CONTROL, DOMAIN
 from .entity import ArcaneContainerEntity, ArcaneProjectEntity
 from .helpers import async_setup_entities
 
@@ -39,6 +39,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up Arcane buttons."""
     coordinator = entry.runtime_data
+    if not coordinator.option(CONF_ALLOW_CONTROL):
+        return
 
     async_setup_entities(
         coordinator,
@@ -90,8 +92,8 @@ class ArcaneProjectRestartButton(ArcaneProjectEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Restart the project."""
         try:
-            await self.coordinator.client.async_project_restart(
-                self.environment_id, self.project_id
+            await self.coordinator.client.async_project_action(
+                self.environment_id, self.project_id, "restart"
             )
         except ArcaneError as err:
             raise HomeAssistantError(

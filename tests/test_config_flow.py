@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -122,3 +123,67 @@ async def test_reconfigure_flow(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data["url"] == "https://arcane.example.com"
+
+
+async def test_invalid_url_is_rejected(
+    hass: HomeAssistant, mock_client: AsyncMock
+) -> None:
+    """Anything that is not a plain http(s) address is refused."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_USER},
+        data={**USER_INPUT, "url": "ftp://192.168.1.10"},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_url"}
+    mock_client.async_get_version.assert_not_called()
+
+
+async def test_url_with_credentials_is_rejected(
+    hass: HomeAssistant, mock_client: AsyncMock
+) -> None:
+    """Userinfo in the address would end up in logs, so it is refused."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_USER},
+        data={**USER_INPUT, "url": "http://admin:hunter2@192.168.1.10:3552"},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_url"}
+
+
+async def test_options_flow(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Options are stored and reload the entry."""
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "scan_interval": 120,
+            "environments": ["0"],
+            "monitor_containers": True,
+            "monitor_projects": False,
+            "monitor_resources": True,
+            "update_entities": True,
+            "allow_control": False,
+            "include_internal": True,
+            "include_hidden": False,
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options["scan_interval"] == 120
+    assert mock_config_entry.options["allow_control"] is False
+    # The entry reloaded without the control platforms, so the switch is gone
+    # and only its restored registry entry is left behind.
+    assert hass.states.get("switch.homeassistant").state == STATE_UNAVAILABLE

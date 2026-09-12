@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ArcaneConfigEntry
 from .api import ArcaneError
-from .const import DOMAIN
+from .const import CONF_ALLOW_CONTROL, DOMAIN
 from .entity import ArcaneContainerEntity, ArcaneProjectEntity
 from .helpers import async_setup_entities
 
@@ -41,6 +41,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up Arcane switches."""
     coordinator = entry.runtime_data
+    if not coordinator.option(CONF_ALLOW_CONTROL):
+        return
 
     async_setup_entities(
         coordinator,
@@ -121,10 +123,10 @@ class ArcaneProjectSwitch(ArcaneProjectEntity, SwitchEntity):
 
     async def _async_action(self, action: str) -> None:
         """Run a project action and refresh the coordinator."""
-        client = self.coordinator.client
-        call = client.async_project_up if action == "up" else client.async_project_down
         try:
-            await call(self.environment_id, self.project_id)
+            await self.coordinator.client.async_project_action(
+                self.environment_id, self.project_id, action
+            )
         except ArcaneError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
