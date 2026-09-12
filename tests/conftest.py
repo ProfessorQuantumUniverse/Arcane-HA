@@ -30,7 +30,11 @@ CONTAINERS_PAYLOAD = [
             "com.docker.compose.project": "smarthome",
             "com.docker.compose.service": "homeassistant",
         },
-        "updateInfo": {"hasUpdate": True},
+        "updateInfo": {
+            "hasUpdate": True,
+            "currentVersion": "2025.1.0",
+            "latestVersion": "2025.2.0",
+        },
     },
     {
         "id": "dead10cc",

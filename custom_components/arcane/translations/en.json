@@ -35,12 +35,42 @@
       "cannot_connect": "Failed to connect to Arcane. Check the URL and that the instance is reachable.",
       "invalid_auth": "Arcane rejected the API key.",
       "insufficient_permissions": "The API key is missing the environments:list permission.",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "invalid_url": "That is not a valid http:// or https:// address."
     },
     "abort": {
       "already_configured": "This Arcane instance is already configured.",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Reconfiguration was successful"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Arcane options",
+        "data": {
+          "scan_interval": "Update interval",
+          "environments": "Environments",
+          "monitor_containers": "Containers",
+          "monitor_projects": "Compose projects",
+          "monitor_resources": "Images, volumes and networks",
+          "update_entities": "Image update entities",
+          "allow_control": "Allow control from Home Assistant",
+          "include_internal": "Include internal containers",
+          "include_hidden": "Include hidden containers"
+        },
+        "data_description": {
+          "scan_interval": "How often Arcane is polled, in seconds.",
+          "environments": "Leave empty to follow every environment Arcane exposes.",
+          "monitor_containers": "Create a device with entities for each container.",
+          "monitor_projects": "Create a device with entities for each Compose project.",
+          "monitor_resources": "Poll the image, volume and network counts and the Docker version.",
+          "update_entities": "Offer an update entity per container that redeploys it onto the newer image.",
+          "allow_control": "Turn this off for a read only setup: no switches, buttons or update installs are created.",
+          "include_internal": "Also expose containers Arcane marks as internal.",
+          "include_hidden": "Also expose containers hidden in the Arcane interface."
+        }
+      }
     }
   },
   "entity": {
@@ -154,6 +184,11 @@
       "services_total": {
         "name": "Services",
         "unit_of_measurement": "services"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image update"
       }
     }
   },

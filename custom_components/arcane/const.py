@@ -2,17 +2,39 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Final
 
 DOMAIN: Final = "arcane"
 
 MANUFACTURER: Final = "Arcane"
 
-DEFAULT_SCAN_INTERVAL: Final = timedelta(seconds=30)
 DEFAULT_TIMEOUT: Final = 30
 
-CONF_VERIFY_SSL: Final = "verify_ssl"
+# Options
+CONF_ENVIRONMENTS: Final = "environments"
+CONF_MONITOR_CONTAINERS: Final = "monitor_containers"
+CONF_MONITOR_PROJECTS: Final = "monitor_projects"
+CONF_MONITOR_RESOURCES: Final = "monitor_resources"
+CONF_INCLUDE_INTERNAL: Final = "include_internal"
+CONF_INCLUDE_HIDDEN: Final = "include_hidden"
+CONF_ALLOW_CONTROL: Final = "allow_control"
+CONF_UPDATE_ENTITIES: Final = "update_entities"
+
+DEFAULT_SCAN_INTERVAL: Final = 30
+MIN_SCAN_INTERVAL: Final = 10
+MAX_SCAN_INTERVAL: Final = 3600
+
+DEFAULT_OPTIONS: Final[dict[str, object]] = {
+    "scan_interval": DEFAULT_SCAN_INTERVAL,
+    CONF_ENVIRONMENTS: [],
+    CONF_MONITOR_CONTAINERS: True,
+    CONF_MONITOR_PROJECTS: True,
+    CONF_MONITOR_RESOURCES: True,
+    CONF_INCLUDE_INTERNAL: False,
+    CONF_INCLUDE_HIDDEN: False,
+    CONF_ALLOW_CONTROL: True,
+    CONF_UPDATE_ENTITIES: True,
+}
 
 # Reserved ID of the environment Arcane manages directly.
 LOCAL_ENVIRONMENT_ID: Final = "0"

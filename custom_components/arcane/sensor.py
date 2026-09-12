@@ -18,7 +18,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from . import ArcaneConfigEntry
-from .const import CONTAINER_STATES, PROJECT_STATES
+from .const import (
+    CONF_MONITOR_CONTAINERS,
+    CONF_MONITOR_PROJECTS,
+    CONF_MONITOR_RESOURCES,
+    CONTAINER_STATES,
+    PROJECT_STATES,
+)
 from .entity import (
     ArcaneContainerEntity,
     ArcaneEnvironmentEntity,
@@ -35,6 +41,8 @@ class ArcaneEnvironmentSensorDescription(SensorEntityDescription):
     """Describes an Arcane environment sensor."""
 
     value_fn: Callable[[ArcaneEnvironment], StateType]
+    #: Option that has to be on for this sensor to have anything to report.
+    requires: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,54 +68,63 @@ def _enum_value(value: str, options: list[str]) -> str | None:
 ENVIRONMENT_SENSORS: tuple[ArcaneEnvironmentSensorDescription, ...] = (
     ArcaneEnvironmentSensorDescription(
         key="containers_running",
+        requires=CONF_MONITOR_CONTAINERS,
         translation_key="containers_running",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.containers_running,
     ),
     ArcaneEnvironmentSensorDescription(
         key="containers_stopped",
+        requires=CONF_MONITOR_CONTAINERS,
         translation_key="containers_stopped",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.containers_stopped,
     ),
     ArcaneEnvironmentSensorDescription(
         key="containers_total",
+        requires=CONF_MONITOR_CONTAINERS,
         translation_key="containers_total",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.containers_total,
     ),
     ArcaneEnvironmentSensorDescription(
         key="containers_update_available",
+        requires=CONF_MONITOR_CONTAINERS,
         translation_key="containers_update_available",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.containers_with_update,
     ),
     ArcaneEnvironmentSensorDescription(
         key="projects_running",
+        requires=CONF_MONITOR_PROJECTS,
         translation_key="projects_running",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.projects_running,
     ),
     ArcaneEnvironmentSensorDescription(
         key="projects_total",
+        requires=CONF_MONITOR_PROJECTS,
         translation_key="projects_total",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.projects_total,
     ),
     ArcaneEnvironmentSensorDescription(
         key="images_total",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="images_total",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.image_counts.get("totalImages"),
     ),
     ArcaneEnvironmentSensorDescription(
         key="images_unused",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="images_unused",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.image_counts.get("imagesUnused"),
     ),
     ArcaneEnvironmentSensorDescription(
         key="images_size",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="images_size",
         device_class=SensorDeviceClass.DATA_SIZE,
         native_unit_of_measurement=UnitOfInformation.BYTES,
@@ -118,24 +135,28 @@ ENVIRONMENT_SENSORS: tuple[ArcaneEnvironmentSensorDescription, ...] = (
     ),
     ArcaneEnvironmentSensorDescription(
         key="volumes_total",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="volumes_total",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.volume_counts.get("total"),
     ),
     ArcaneEnvironmentSensorDescription(
         key="volumes_unused",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="volumes_unused",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.volume_counts.get("unused"),
     ),
     ArcaneEnvironmentSensorDescription(
         key="networks_total",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="networks_total",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda environment: environment.network_counts.get("total"),
     ),
     ArcaneEnvironmentSensorDescription(
         key="docker_version",
+        requires=CONF_MONITOR_RESOURCES,
         translation_key="docker_version",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
@@ -210,6 +231,7 @@ async def async_setup_entry(
         environments=lambda environment_id: [
             ArcaneEnvironmentSensor(coordinator, environment_id, description)
             for description in ENVIRONMENT_SENSORS
+            if coordinator.option(description.requires)
         ],
         containers=lambda environment_id, name: [
             ArcaneContainerSensor(coordinator, environment_id, name, description)

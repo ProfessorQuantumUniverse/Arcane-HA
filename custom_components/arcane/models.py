@@ -23,6 +23,21 @@ def _container_name(payload: dict[str, Any]) -> str:
     return str(payload.get("id", ""))[:12]
 
 
+def _version(value: Any) -> str | None:
+    """Return a non-empty version string, or None."""
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _image_tag(image: str) -> str | None:
+    """Return the tag of an image reference, ignoring a port in the registry."""
+    _, separator, tag = image.rpartition(":")
+    if not separator or "/" in tag:
+        return None
+    return tag or None
+
+
 def _created_at(value: Any) -> datetime | None:
     """Return the creation timestamp of a container as an aware datetime."""
     if isinstance(value, (int, float)) and value > 0:
@@ -41,6 +56,8 @@ class ArcaneContainer:
     image: str
     created: datetime | None
     update_available: bool
+    installed_version: str | None
+    latest_version: str | None
     project: str | None
     service: str | None
 
@@ -54,14 +71,19 @@ class ArcaneContainer:
         """Build a container from an Arcane container summary."""
         labels = payload.get("labels") or {}
         update_info = payload.get("updateInfo") or {}
+        image = str(payload.get("image") or "")
+        installed = _version(update_info.get("currentVersion")) or _image_tag(image)
+        latest = _version(update_info.get("latestVersion"))
         return cls(
             id=str(payload.get("id", "")),
             name=_container_name(payload),
             state=str(payload.get("state") or "unknown"),
             status=str(payload.get("status") or ""),
-            image=str(payload.get("image") or ""),
+            image=image,
             created=_created_at(payload.get("created")),
             update_available=bool(update_info.get("hasUpdate")),
+            installed_version=installed,
+            latest_version=latest or installed,
             project=labels.get("com.docker.compose.project"),
             service=labels.get("com.docker.compose.service"),
         )
