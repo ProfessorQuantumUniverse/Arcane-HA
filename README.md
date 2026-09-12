@@ -1,4 +1,4 @@
-<img src="brands/icon.png" alt="" width="96" align="left" hspace="16">
+<img src="brands/icon.png" alt="" width="130" align="center" hspace="16">
 
 # Arcane for Home Assistant
 
