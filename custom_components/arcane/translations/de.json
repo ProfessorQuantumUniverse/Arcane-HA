@@ -1,0 +1,171 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit Arcane verbinden",
+        "description": "Gib die Adresse deiner Arcane-Instanz und einen API-Key an, den du unter Einstellungen → API-Keys erstellst.",
+        "data": {
+          "url": "URL",
+          "api_key": "API-Key",
+          "verify_ssl": "SSL-Zertifikat prüfen"
+        },
+        "data_description": {
+          "url": "Vollständige Adresse der Arcane-Oberfläche, zum Beispiel http://192.168.1.10:3552",
+          "api_key": "Ein Arcane-API-Key. Er benötigt Leserechte sowie die Berechtigungen für die Aktionen, die du aus Home Assistant heraus auslösen möchtest.",
+          "verify_ssl": "Deaktivieren, wenn Arcane ein selbstsigniertes Zertifikat verwendet."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut bei Arcane anmelden",
+        "description": "Der API-Key für {url} wird nicht mehr akzeptiert. Bitte gib einen neuen an.",
+        "data": {
+          "api_key": "API-Key"
+        }
+      },
+      "reconfigure": {
+        "title": "Arcane neu konfigurieren",
+        "data": {
+          "url": "URL",
+          "api_key": "API-Key",
+          "verify_ssl": "SSL-Zertifikat prüfen"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zu Arcane fehlgeschlagen. Prüfe die URL und ob die Instanz erreichbar ist.",
+      "invalid_auth": "Arcane hat den API-Key abgelehnt.",
+      "insufficient_permissions": "Dem API-Key fehlt die Berechtigung environments:list.",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Diese Arcane-Instanz ist bereits eingerichtet.",
+      "reauth_successful": "Erneute Anmeldung erfolgreich",
+      "reconfigure_successful": "Neukonfiguration erfolgreich"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "environment_online": {
+        "name": "Online"
+      },
+      "container_running": {
+        "name": "Läuft"
+      },
+      "project_running": {
+        "name": "Läuft"
+      },
+      "update_available": {
+        "name": "Update verfügbar"
+      }
+    },
+    "button": {
+      "restart": {
+        "name": "Neustarten"
+      }
+    },
+    "sensor": {
+      "containers_running": {
+        "name": "Laufende Container",
+        "unit_of_measurement": "Container"
+      },
+      "containers_stopped": {
+        "name": "Gestoppte Container",
+        "unit_of_measurement": "Container"
+      },
+      "containers_total": {
+        "name": "Container",
+        "unit_of_measurement": "Container"
+      },
+      "containers_update_available": {
+        "name": "Container-Updates verfügbar",
+        "unit_of_measurement": "Container"
+      },
+      "projects_running": {
+        "name": "Laufende Projekte",
+        "unit_of_measurement": "Projekte"
+      },
+      "projects_total": {
+        "name": "Projekte",
+        "unit_of_measurement": "Projekte"
+      },
+      "images_total": {
+        "name": "Images",
+        "unit_of_measurement": "Images"
+      },
+      "images_unused": {
+        "name": "Ungenutzte Images",
+        "unit_of_measurement": "Images"
+      },
+      "images_size": {
+        "name": "Image-Speicher"
+      },
+      "volumes_total": {
+        "name": "Volumes",
+        "unit_of_measurement": "Volumes"
+      },
+      "volumes_unused": {
+        "name": "Ungenutzte Volumes",
+        "unit_of_measurement": "Volumes"
+      },
+      "networks_total": {
+        "name": "Netzwerke",
+        "unit_of_measurement": "Netzwerke"
+      },
+      "docker_version": {
+        "name": "Docker-Version"
+      },
+      "container_state": {
+        "name": "Zustand",
+        "state": {
+          "created": "Erstellt",
+          "dead": "Tot",
+          "exited": "Beendet",
+          "paused": "Pausiert",
+          "removing": "Wird entfernt",
+          "restarting": "Startet neu",
+          "running": "Läuft"
+        }
+      },
+      "container_status": {
+        "name": "Status"
+      },
+      "container_image": {
+        "name": "Image"
+      },
+      "container_created": {
+        "name": "Erstellt"
+      },
+      "project_status": {
+        "name": "Status",
+        "state": {
+          "deploying": "Wird bereitgestellt",
+          "partially_running": "Teilweise laufend",
+          "restarting": "Startet neu",
+          "running": "Läuft",
+          "stopped": "Gestoppt",
+          "stopping": "Wird gestoppt",
+          "unknown": "Unbekannt"
+        }
+      },
+      "services_running": {
+        "name": "Laufende Services",
+        "unit_of_measurement": "Services"
+      },
+      "services_total": {
+        "name": "Services",
+        "unit_of_measurement": "Services"
+      }
+    }
+  },
+  "exceptions": {
+    "container_not_found": {
+      "message": "Container {name} ist Arcane nicht mehr bekannt."
+    },
+    "container_action_failed": {
+      "message": "Aktion {action} für Container {name} fehlgeschlagen: {error}"
+    },
+    "project_action_failed": {
+      "message": "Aktion {action} für Projekt {name} fehlgeschlagen: {error}"
+    }
+  }
+}
