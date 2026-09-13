@@ -16,6 +16,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import ArcaneAuthenticationError, ArcaneClient, ArcaneError
 from .const import (
     CONF_ENVIRONMENTS,
+    CONF_EVENTS,
+    CONF_HOST_STATS,
     CONF_INCLUDE_HIDDEN,
     CONF_INCLUDE_INTERNAL,
     CONF_MONITOR_CONTAINERS,
@@ -24,8 +26,19 @@ from .const import (
     DEFAULT_OPTIONS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    EVENT_CONTAINER_HEALTH,
+    EVENT_CONTAINER_STATE,
+    EVENT_PROJECT_STATE,
+    EXIT_CODE_SIGKILL,
+    STATE_RUNNING,
 )
-from .models import ArcaneContainer, ArcaneData, ArcaneEnvironment, ArcaneProject
+from .models import (
+    ArcaneContainer,
+    ArcaneData,
+    ArcaneEnvironment,
+    ArcaneHostStats,
+    ArcaneProject,
+)
 
 if TYPE_CHECKING:
     from . import ArcaneConfigEntry
@@ -85,10 +98,13 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             *(self._async_update_environment(item) for item in wanted)
         )
 
-        return ArcaneData(
+        data = ArcaneData(
             version=version_info.get("currentVersion"),
             environments={item.id: item for item in results},
         )
+        if self.option(CONF_EVENTS):
+            self._fire_events(data)
+        return data
 
     async def _async_update_environment(
         self, payload: dict[str, Any]
@@ -122,6 +138,8 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             calls["volumes"] = self.client.async_get_volume_counts(environment_id)
             calls["networks"] = self.client.async_get_network_counts(environment_id)
             calls["docker"] = self.client.async_get_docker_info(environment_id)
+        if self.option(CONF_HOST_STATS):
+            calls["host"] = self.client.async_get_host_stats(environment_id)
 
         if not calls:
             environment.reachable = True
@@ -172,7 +190,74 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
         )
         environment.docker_info = self._value(results.get("docker"), environment_id, {})
         environment.docker_version = environment.docker_info.get("ServerVersion")
+        if host := self._value(results.get("host"), environment_id, {}):
+            environment.host_stats = ArcaneHostStats.from_api(host)
         return environment
+
+    def _fire_events(self, data: ArcaneData) -> None:
+        """Announce what changed since the previous refresh on the event bus.
+
+        Nothing is fired for the first refresh or for a resource that has just
+        appeared: neither is a change a user could act on.
+        """
+        if (previous := self.data) is None:
+            return
+
+        for environment_id, environment in data.environments.items():
+            if (was := previous.environments.get(environment_id)) is None:
+                continue
+            shared = {
+                "environment_id": environment_id,
+                "environment": environment.name,
+            }
+
+            for name, container in environment.containers.items():
+                if (before := was.containers.get(name)) is None:
+                    continue
+                if before.state != container.state:
+                    crashed = (
+                        before.state == STATE_RUNNING
+                        and not container.is_running
+                        and bool(container.exit_code)
+                    )
+                    self.hass.bus.async_fire(
+                        EVENT_CONTAINER_STATE,
+                        {
+                            **shared,
+                            "container": name,
+                            "state": container.state,
+                            "previous_state": before.state,
+                            "exit_code": container.exit_code,
+                            "crashed": crashed,
+                            "oom_killed": crashed
+                            and container.exit_code == EXIT_CODE_SIGKILL,
+                        },
+                    )
+                if before.health != container.health and container.health is not None:
+                    self.hass.bus.async_fire(
+                        EVENT_CONTAINER_HEALTH,
+                        {
+                            **shared,
+                            "container": name,
+                            "health": container.health,
+                            "previous_health": before.health,
+                        },
+                    )
+
+            for project_id, project in environment.projects.items():
+                before_project = was.projects.get(project_id)
+                if before_project is None or before_project.status == project.status:
+                    continue
+                self.hass.bus.async_fire(
+                    EVENT_PROJECT_STATE,
+                    {
+                        **shared,
+                        "project": project.name,
+                        "project_id": project_id,
+                        "status": project.status,
+                        "previous_status": before_project.status,
+                    },
+                )
 
     @staticmethod
     def _value(result: Any, environment_id: str, default: Any) -> Any:

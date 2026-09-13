@@ -12,13 +12,15 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfInformation
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from . import ArcaneConfigEntry
 from .const import (
+    CONF_HEALTH_SENSORS,
+    CONF_HOST_STATS,
     CONF_MONITOR_CONTAINERS,
     CONF_MONITOR_PROJECTS,
     CONF_MONITOR_RESOURCES,
@@ -57,6 +59,13 @@ class ArcaneProjectSensorDescription(SensorEntityDescription):
     """Describes an Arcane compose project sensor."""
 
     value_fn: Callable[[ArcaneProject], StateType]
+
+
+def _host(environment: ArcaneEnvironment, attribute: str) -> StateType:
+    """Return a host statistics value, or None when no sample is available."""
+    if environment.host_stats is None:
+        return None
+    return getattr(environment.host_stats, attribute)
 
 
 def _enum_value(value: str, options: list[str]) -> str | None:
@@ -162,6 +171,74 @@ ENVIRONMENT_SENSORS: tuple[ArcaneEnvironmentSensorDescription, ...] = (
         entity_registry_enabled_default=False,
         value_fn=lambda environment: environment.docker_version,
     ),
+    ArcaneEnvironmentSensorDescription(
+        key="containers_unhealthy",
+        requires=CONF_HEALTH_SENSORS,
+        translation_key="containers_unhealthy",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda environment: environment.containers_unhealthy,
+    ),
+    ArcaneEnvironmentSensorDescription(
+        key="host_cpu",
+        requires=CONF_HOST_STATS,
+        translation_key="host_cpu",
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=1,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda environment: _host(environment, "cpu_percent"),
+    ),
+    ArcaneEnvironmentSensorDescription(
+        key="host_memory_percent",
+        requires=CONF_HOST_STATS,
+        translation_key="host_memory_percent",
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=1,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda environment: _host(environment, "memory_percent"),
+    ),
+    ArcaneEnvironmentSensorDescription(
+        key="host_memory_used",
+        requires=CONF_HOST_STATS,
+        translation_key="host_memory_used",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda environment: _host(environment, "memory_used"),
+    ),
+    ArcaneEnvironmentSensorDescription(
+        key="host_memory_total",
+        requires=CONF_HOST_STATS,
+        translation_key="host_memory_total",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        suggested_display_precision=2,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda environment: _host(environment, "memory_total"),
+    ),
+    ArcaneEnvironmentSensorDescription(
+        key="host_disk_percent",
+        requires=CONF_HOST_STATS,
+        translation_key="host_disk_percent",
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=1,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda environment: _host(environment, "disk_percent"),
+    ),
+    ArcaneEnvironmentSensorDescription(
+        key="host_disk_used",
+        requires=CONF_HOST_STATS,
+        translation_key="host_disk_used",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        suggested_display_precision=1,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda environment: _host(environment, "disk_used"),
+    ),
 )
 
 CONTAINER_SENSORS: tuple[ArcaneContainerSensorDescription, ...] = (
@@ -192,6 +269,11 @@ CONTAINER_SENSORS: tuple[ArcaneContainerSensorDescription, ...] = (
         entity_registry_enabled_default=False,
         value_fn=lambda container: container.created,
     ),
+)
+
+ARCANE_VERSION_SENSOR = SensorEntityDescription(
+    key="arcane_version",
+    translation_key="arcane_version",
 )
 
 PROJECT_SENSORS: tuple[ArcaneProjectSensorDescription, ...] = (
@@ -229,9 +311,12 @@ async def async_setup_entry(
         coordinator,
         async_add_entities,
         environments=lambda environment_id: [
-            ArcaneEnvironmentSensor(coordinator, environment_id, description)
-            for description in ENVIRONMENT_SENSORS
-            if coordinator.option(description.requires)
+            *(
+                ArcaneEnvironmentSensor(coordinator, environment_id, description)
+                for description in ENVIRONMENT_SENSORS
+                if coordinator.option(description.requires)
+            ),
+            ArcaneVersionSensor(coordinator, environment_id, ARCANE_VERSION_SENSOR),
         ],
         containers=lambda environment_id, name: [
             ArcaneContainerSensor(coordinator, environment_id, name, description)
@@ -242,6 +327,18 @@ async def async_setup_entry(
             for description in PROJECT_SENSORS
         ],
     )
+
+
+class ArcaneVersionSensor(ArcaneEnvironmentEntity, SensorEntity):
+    """Report the version of the Arcane instance."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the version Arcane reports."""
+        return self.coordinator.data.version
 
 
 class ArcaneEnvironmentSensor(ArcaneEnvironmentEntity, SensorEntity):

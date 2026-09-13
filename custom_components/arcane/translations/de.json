@@ -28,6 +28,9 @@
           "url": "URL",
           "api_key": "API-Key",
           "verify_ssl": "SSL-Zertifikat prüfen"
+        },
+        "data_description": {
+          "api_key": "Leer lassen, um den bereits gespeicherten Key zu behalten."
         }
       }
     },
@@ -48,14 +51,21 @@
     "step": {
       "init": {
         "title": "Arcane Optionen",
+        "menu_options": {
+          "polling": "Abfrage",
+          "entities": "Entitäten",
+          "control": "Steuerung"
+        }
+      },
+      "polling": {
+        "title": "Abfrage",
         "data": {
           "scan_interval": "Aktualisierungsintervall",
           "environments": "Environments",
           "monitor_containers": "Container",
           "monitor_projects": "Compose Projekte",
           "monitor_resources": "Images, Volumes und Netzwerke",
-          "update_entities": "Update Entitäten für Images",
-          "allow_control": "Steuerung aus Home Assistant erlauben",
+          "host_stats": "CPU, RAM und Festplatte des Hosts",
           "include_internal": "Interne Container einbeziehen",
           "include_hidden": "Versteckte Container einbeziehen"
         },
@@ -65,11 +75,49 @@
           "monitor_containers": "Für jeden Container ein Gerät mit Entitäten anlegen.",
           "monitor_projects": "Für jedes Compose Projekt ein Gerät mit Entitäten anlegen.",
           "monitor_resources": "Image, Volume und Netzwerk Zähler sowie die Docker Version abfragen.",
-          "update_entities": "Pro Container eine Update Entität anbieten, die per Redeploy auf das neuere Image wechselt.",
-          "allow_control": "Ausschalten für einen reinen Lesebetrieb: keine Schalter, Buttons oder Update Installationen.",
+          "host_stats": "Pro Aktualisierung eine Messung über eine kurzlebige WebSocket Verbindung. Standardmäßig aus, weil es eine zusätzliche Verbindung je Aktualisierung ist.",
           "include_internal": "Auch Container einbeziehen, die Arcane als intern markiert.",
           "include_hidden": "Auch Container einbeziehen, die in der Arcane Oberfläche versteckt sind."
         }
+      },
+      "entities": {
+        "title": "Entitäten",
+        "data": {
+          "update_entities": "Update Entitäten für Images",
+          "health_sensors": "Health Binärsensoren",
+          "entity_prefix": "Gerätenamen mit ihrer Art voranstellen",
+          "nest_containers": "Container unter ihrem Projekt einordnen",
+          "events": "Events auf dem Home Assistant Bus auslösen"
+        },
+        "data_description": {
+          "update_entities": "Pro Container eine Update Entität anbieten, die per Redeploy auf das neuere Image wechselt.",
+          "health_sensors": "Container mit Health Check bekommen einen Sensor Healthy.",
+          "entity_prefix": "Geräte als Container x und Project x benennen, damit ein Container und ein Projekt mit gleichem Namen nicht kollidieren. Bereits vorhandene Entity IDs bleiben unverändert.",
+          "nest_containers": "Einen Container als Untergerät des Compose Projekts anzeigen, zu dem er gehört.",
+          "events": "Löst arcane_container_state_changed, arcane_container_health_changed und arcane_project_state_changed aus, damit Automatisierungen auf Abstürze und Health Wechsel reagieren können."
+        }
+      },
+      "control": {
+        "title": "Steuerung",
+        "data": {
+          "allow_control": "Steuerung aus Home Assistant erlauben",
+          "redeploy_buttons": "Redeploy Buttons",
+          "prune_button": "Prune Button"
+        },
+        "data_description": {
+          "allow_control": "Ausschalten für einen reinen Lesebetrieb: keine Schalter, Buttons oder Update Installationen.",
+          "redeploy_buttons": "Pro Container und Projekt einen Button, der das Image neu zieht und neu erstellt.",
+          "prune_button": "Pro Environment ein Button, der ungenutzte Images, Netzwerke und Build Cache entfernt. Container und Volumes werden nie entfernt."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_button": {
+      "options": {
+        "off": "Kein Button",
+        "dangling": "Verwaiste Images, ungenutzte Netzwerke und Build Cache",
+        "unused": "Alle ungenutzten Images, Netzwerke und Build Cache"
       }
     }
   },
@@ -86,11 +134,20 @@
       },
       "update_available": {
         "name": "Update verfügbar"
+      },
+      "container_healthy": {
+        "name": "Healthy"
       }
     },
     "button": {
       "restart": {
         "name": "Neustarten"
+      },
+      "redeploy": {
+        "name": "Redeploy"
+      },
+      "prune": {
+        "name": "Ungenutztes entfernen"
       }
     },
     "sensor": {
@@ -184,6 +241,31 @@
       "services_total": {
         "name": "Services",
         "unit_of_measurement": "Services"
+      },
+      "containers_unhealthy": {
+        "name": "Ungesunde Container",
+        "unit_of_measurement": "Container"
+      },
+      "arcane_version": {
+        "name": "Arcane Version"
+      },
+      "host_cpu": {
+        "name": "Host CPU"
+      },
+      "host_memory_percent": {
+        "name": "Host Arbeitsspeicher"
+      },
+      "host_memory_used": {
+        "name": "Host Arbeitsspeicher belegt"
+      },
+      "host_memory_total": {
+        "name": "Host Arbeitsspeicher gesamt"
+      },
+      "host_disk_percent": {
+        "name": "Host Festplatte"
+      },
+      "host_disk_used": {
+        "name": "Host Festplatte belegt"
       }
     },
     "update": {
@@ -201,6 +283,9 @@
     },
     "project_action_failed": {
       "message": "Aktion {action} für Projekt {name} fehlgeschlagen: {error}"
+    },
+    "prune_failed": {
+      "message": "Prune für Environment {name} fehlgeschlagen: {error}"
     }
   }
 }

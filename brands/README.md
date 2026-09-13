@@ -11,6 +11,10 @@ so they can be submitted there as `custom_integrations/arcane/`:
 | `logo.png` | 256x256 |
 | `logo@2x.png` | 512x512 |
 
-Until that submission is accepted, Home Assistant shows a generic placeholder for the
-integration. The assets here are original artwork for this project and are not the
-Arcane project's own logo.
+`custom_components/arcane/brand/icon.png` and `logo.png` are copies of the same
+artwork. HACS looks for them there and only falls back to the brands repository when
+they are missing, so the integration validates before that submission is accepted.
+Home Assistant itself still shows a generic placeholder until it is.
+
+The assets here are original artwork for this project and are not the Arcane project's
+own logo.

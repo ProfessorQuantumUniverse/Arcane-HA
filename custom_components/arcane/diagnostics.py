@@ -23,6 +23,7 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
+        "options": dict(entry.options),
         "version": data.version,
         "environments": [
             {
@@ -35,6 +36,11 @@ async def async_get_config_entry_diagnostics(
                 "image_counts": environment.image_counts,
                 "volume_counts": environment.volume_counts,
                 "network_counts": environment.network_counts,
+                "host_stats": (
+                    asdict(environment.host_stats)
+                    if environment.host_stats is not None
+                    else None
+                ),
                 "containers": [
                     asdict(container) for container in environment.containers.values()
                 ],

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.button import (
     ButtonDeviceClass,
     ButtonEntity,
@@ -13,22 +15,35 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ArcaneConfigEntry
 from .api import ArcaneError
-from .const import CONF_ALLOW_CONTROL, DOMAIN
-from .entity import ArcaneContainerEntity, ArcaneProjectEntity
+from .const import (
+    CONF_ALLOW_CONTROL,
+    CONF_PRUNE_BUTTON,
+    CONF_REDEPLOY_BUTTONS,
+    DOMAIN,
+    PRUNE_OFF,
+    PRUNE_UNUSED,
+)
+from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity, ArcaneProjectEntity
 from .helpers import async_setup_entities
+
+_LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
 
-CONTAINER_RESTART_BUTTON = ButtonEntityDescription(
+RESTART_BUTTON = ButtonEntityDescription(
     key="restart",
     translation_key="restart",
     device_class=ButtonDeviceClass.RESTART,
 )
 
-PROJECT_RESTART_BUTTON = ButtonEntityDescription(
-    key="restart",
-    translation_key="restart",
-    device_class=ButtonDeviceClass.RESTART,
+REDEPLOY_BUTTON = ButtonEntityDescription(
+    key="redeploy",
+    translation_key="redeploy",
+)
+
+PRUNE_BUTTON = ButtonEntityDescription(
+    key="prune",
+    translation_key="prune",
 )
 
 
@@ -42,27 +57,56 @@ async def async_setup_entry(
     if not coordinator.option(CONF_ALLOW_CONTROL):
         return
 
+    redeploy = coordinator.option(CONF_REDEPLOY_BUTTONS)
+    prune = coordinator.option(CONF_PRUNE_BUTTON) != PRUNE_OFF
+
     async_setup_entities(
         coordinator,
         async_add_entities,
-        containers=lambda environment_id, name: [
-            ArcaneContainerRestartButton(
-                coordinator, environment_id, name, CONTAINER_RESTART_BUTTON
+        environments=(
+            (
+                lambda environment_id: [
+                    ArcanePruneButton(coordinator, environment_id, PRUNE_BUTTON)
+                ]
             )
+            if prune
+            else None
+        ),
+        containers=lambda environment_id, name: [
+            ArcaneContainerButton(coordinator, environment_id, name, RESTART_BUTTON),
+            *(
+                [
+                    ArcaneContainerButton(
+                        coordinator, environment_id, name, REDEPLOY_BUTTON
+                    )
+                ]
+                if redeploy
+                else []
+            ),
         ],
         projects=lambda environment_id, project_id: [
-            ArcaneProjectRestartButton(
-                coordinator, environment_id, project_id, PROJECT_RESTART_BUTTON
-            )
+            ArcaneProjectButton(
+                coordinator, environment_id, project_id, RESTART_BUTTON
+            ),
+            *(
+                [
+                    ArcaneProjectButton(
+                        coordinator, environment_id, project_id, REDEPLOY_BUTTON
+                    )
+                ]
+                if redeploy
+                else []
+            ),
         ],
     )
 
 
-class ArcaneContainerRestartButton(ArcaneContainerEntity, ButtonEntity):
-    """Restart a container."""
+class ArcaneContainerButton(ArcaneContainerEntity, ButtonEntity):
+    """Run a container action that has no state of its own."""
 
     async def async_press(self) -> None:
-        """Restart the container."""
+        """Run the action this button stands for."""
+        action = self.entity_description.key
         if (container := self.container) is None:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -71,14 +115,14 @@ class ArcaneContainerRestartButton(ArcaneContainerEntity, ButtonEntity):
             )
         try:
             await self.coordinator.client.async_container_action(
-                self.environment_id, container.id, "restart"
+                self.environment_id, container.id, action
             )
         except ArcaneError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="container_action_failed",
                 translation_placeholders={
-                    "action": "restart",
+                    "action": action,
                     "name": self.container_name,
                     "error": str(err),
                 },
@@ -86,23 +130,53 @@ class ArcaneContainerRestartButton(ArcaneContainerEntity, ButtonEntity):
         await self.coordinator.async_request_refresh()
 
 
-class ArcaneProjectRestartButton(ArcaneProjectEntity, ButtonEntity):
-    """Restart every service of a compose project."""
+class ArcaneProjectButton(ArcaneProjectEntity, ButtonEntity):
+    """Run a compose project action that has no state of its own."""
 
     async def async_press(self) -> None:
-        """Restart the project."""
+        """Run the action this button stands for."""
+        action = self.entity_description.key
         try:
             await self.coordinator.client.async_project_action(
-                self.environment_id, self.project_id, "restart"
+                self.environment_id, self.project_id, action
             )
         except ArcaneError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="project_action_failed",
                 translation_placeholders={
-                    "action": "restart",
+                    "action": action,
                     "name": self.project.name if self.project else self.project_id,
                     "error": str(err),
                 },
             ) from err
+        await self.coordinator.async_request_refresh()
+
+
+class ArcanePruneButton(ArcaneEnvironmentEntity, ButtonEntity):
+    """Remove unused images, networks and build cache from an environment.
+
+    Containers and volumes are never pruned. Both hold state a user cannot get
+    back, which is not something a single button press should be able to do.
+    """
+
+    async def async_press(self) -> None:
+        """Run the prune."""
+        aggressive = self.coordinator.option(CONF_PRUNE_BUTTON) == PRUNE_UNUSED
+        try:
+            result = await self.coordinator.client.async_prune(
+                self.environment_id, unused_images=aggressive
+            )
+        except ArcaneError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="prune_failed",
+                translation_placeholders={
+                    "name": self.environment.name if self.environment else "",
+                    "error": str(err),
+                },
+            ) from err
+        _LOGGER.debug(
+            "Prune of environment %s returned %s", self.environment_id, result
+        )
         await self.coordinator.async_request_refresh()

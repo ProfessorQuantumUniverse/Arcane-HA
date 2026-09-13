@@ -116,13 +116,15 @@ async def test_reconfigure_flow(
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {"url": "https://arcane.example.com", "api_key": "k", "verify_ssl": False},
+        {"url": "https://arcane.example.com", "verify_ssl": False},
     )
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert mock_config_entry.data["url"] == "https://arcane.example.com"
+    # An empty key field keeps the key that is already stored.
+    assert mock_config_entry.data["api_key"] == "test-key"
 
 
 async def test_invalid_url_is_rejected(
@@ -154,15 +156,20 @@ async def test_url_with_credentials_is_rejected(
     assert result["errors"] == {"base": "invalid_url"}
 
 
-async def test_options_flow(
+async def test_options_flow_polling(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Options are stored and reload the entry."""
+    """The polling section is stored and reloads the entry."""
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.MENU
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "polling"}
+    )
     assert result["type"] is FlowResultType.FORM
 
     result = await hass.config_entries.options.async_configure(
@@ -173,8 +180,7 @@ async def test_options_flow(
             "monitor_containers": True,
             "monitor_projects": False,
             "monitor_resources": True,
-            "update_entities": True,
-            "allow_control": False,
+            "host_stats": False,
             "include_internal": True,
             "include_hidden": False,
         },
@@ -183,7 +189,36 @@ async def test_options_flow(
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options["scan_interval"] == 120
+    assert mock_config_entry.options["monitor_projects"] is False
+    # Untouched sections keep their defaults.
+    assert mock_config_entry.options["allow_control"] is True
+    assert hass.states.get("switch.project_smarthome").state == STATE_UNAVAILABLE
+
+
+async def test_options_flow_control(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The control section can put the integration into read only mode."""
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "control"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "allow_control": False,
+            "redeploy_buttons": False,
+            "prune_button": "off",
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options["allow_control"] is False
     # The entry reloaded without the control platforms, so the switch is gone
     # and only its restored registry entry is left behind.
-    assert hass.states.get("switch.homeassistant").state == STATE_UNAVAILABLE
+    assert hass.states.get("switch.container_homeassistant").state == STATE_UNAVAILABLE

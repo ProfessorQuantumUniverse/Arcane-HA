@@ -15,6 +15,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ArcaneConfigEntry
+from .const import CONF_HEALTH_SENSORS
+from .coordinator import ArcaneCoordinator
 from .entity import (
     ArcaneContainerEntity,
     ArcaneEnvironmentEntity,
@@ -57,6 +59,12 @@ ENVIRONMENT_BINARY_SENSORS: tuple[ArcaneEnvironmentBinarySensorDescription, ...]
     ),
 )
 
+HEALTH_BINARY_SENSOR = ArcaneContainerBinarySensorDescription(
+    key="healthy",
+    translation_key="container_healthy",
+    value_fn=lambda container: container.is_healthy is True,
+)
+
 CONTAINER_BINARY_SENSORS: tuple[ArcaneContainerBinarySensorDescription, ...] = (
     ArcaneContainerBinarySensorDescription(
         key="running",
@@ -88,6 +96,23 @@ PROJECT_BINARY_SENSORS: tuple[ArcaneProjectBinarySensorDescription, ...] = (
 )
 
 
+def _container_descriptions(
+    coordinator: ArcaneCoordinator, environment_id: str, name: str
+) -> tuple[ArcaneContainerBinarySensorDescription, ...]:
+    """Return the binary sensors this container should get.
+
+    The health sensor is only added for containers that actually define a
+    health check, so the others do not gain an entity that is always off.
+    """
+    if not coordinator.option(CONF_HEALTH_SENSORS):
+        return CONTAINER_BINARY_SENSORS
+    environment = coordinator.data.environments.get(environment_id)
+    container = environment.containers.get(name) if environment else None
+    if container is None or container.health is None:
+        return CONTAINER_BINARY_SENSORS
+    return (*CONTAINER_BINARY_SENSORS, HEALTH_BINARY_SENSOR)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ArcaneConfigEntry,
@@ -105,7 +130,9 @@ async def async_setup_entry(
         ],
         containers=lambda environment_id, name: [
             ArcaneContainerBinarySensor(coordinator, environment_id, name, description)
-            for description in CONTAINER_BINARY_SENSORS
+            for description in _container_descriptions(
+                coordinator, environment_id, name
+            )
         ],
         projects=lambda environment_id, project_id: [
             ArcaneProjectBinarySensor(

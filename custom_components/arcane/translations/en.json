@@ -28,6 +28,9 @@
           "url": "URL",
           "api_key": "API key",
           "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "api_key": "Leave empty to keep the key that is already stored."
         }
       }
     },
@@ -48,14 +51,21 @@
     "step": {
       "init": {
         "title": "Arcane options",
+        "menu_options": {
+          "polling": "Polling",
+          "entities": "Entities",
+          "control": "Control"
+        }
+      },
+      "polling": {
+        "title": "Polling",
         "data": {
           "scan_interval": "Update interval",
           "environments": "Environments",
           "monitor_containers": "Containers",
           "monitor_projects": "Compose projects",
           "monitor_resources": "Images, volumes and networks",
-          "update_entities": "Image update entities",
-          "allow_control": "Allow control from Home Assistant",
+          "host_stats": "Host CPU, memory and disk",
           "include_internal": "Include internal containers",
           "include_hidden": "Include hidden containers"
         },
@@ -65,11 +75,49 @@
           "monitor_containers": "Create a device with entities for each container.",
           "monitor_projects": "Create a device with entities for each Compose project.",
           "monitor_resources": "Poll the image, volume and network counts and the Docker version.",
-          "update_entities": "Offer an update entity per container that redeploys it onto the newer image.",
-          "allow_control": "Turn this off for a read only setup: no switches, buttons or update installs are created.",
+          "host_stats": "Take one sample per update over a short lived WebSocket. Off by default because it is an extra connection per update.",
           "include_internal": "Also expose containers Arcane marks as internal.",
           "include_hidden": "Also expose containers hidden in the Arcane interface."
         }
+      },
+      "entities": {
+        "title": "Entities",
+        "data": {
+          "update_entities": "Image update entities",
+          "health_sensors": "Health binary sensors",
+          "entity_prefix": "Prefix device names with their kind",
+          "nest_containers": "Nest containers under their project",
+          "events": "Fire events on the Home Assistant bus"
+        },
+        "data_description": {
+          "update_entities": "Offer an update entity per container that redeploys it onto the newer image.",
+          "health_sensors": "Add a Healthy sensor to containers that define a health check.",
+          "entity_prefix": "Name devices Container x and Project x so a container and a project of the same name do not collide. Entity IDs that already exist keep their current name.",
+          "nest_containers": "Show a container as a child device of the Compose project it belongs to.",
+          "events": "Fire arcane_container_state_changed, arcane_container_health_changed and arcane_project_state_changed so automations can react to crashes and health changes."
+        }
+      },
+      "control": {
+        "title": "Control",
+        "data": {
+          "allow_control": "Allow control from Home Assistant",
+          "redeploy_buttons": "Redeploy buttons",
+          "prune_button": "Prune button"
+        },
+        "data_description": {
+          "allow_control": "Turn this off for a read only setup: no switches, buttons or update installs are created.",
+          "redeploy_buttons": "Add a button per container and per project that pulls the image again and recreates it.",
+          "prune_button": "Add a button per environment that removes unused images, networks and build cache. Containers and volumes are never pruned."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_button": {
+      "options": {
+        "off": "No button",
+        "dangling": "Dangling images, unused networks and build cache",
+        "unused": "All unused images, networks and build cache"
       }
     }
   },
@@ -86,11 +134,20 @@
       },
       "update_available": {
         "name": "Update available"
+      },
+      "container_healthy": {
+        "name": "Healthy"
       }
     },
     "button": {
       "restart": {
         "name": "Restart"
+      },
+      "redeploy": {
+        "name": "Redeploy"
+      },
+      "prune": {
+        "name": "Prune unused"
       }
     },
     "sensor": {
@@ -184,6 +241,31 @@
       "services_total": {
         "name": "Services",
         "unit_of_measurement": "services"
+      },
+      "containers_unhealthy": {
+        "name": "Unhealthy containers",
+        "unit_of_measurement": "containers"
+      },
+      "arcane_version": {
+        "name": "Arcane version"
+      },
+      "host_cpu": {
+        "name": "Host CPU"
+      },
+      "host_memory_percent": {
+        "name": "Host memory"
+      },
+      "host_memory_used": {
+        "name": "Host memory used"
+      },
+      "host_memory_total": {
+        "name": "Host memory total"
+      },
+      "host_disk_percent": {
+        "name": "Host disk"
+      },
+      "host_disk_used": {
+        "name": "Host disk used"
       }
     },
     "update": {
@@ -201,6 +283,9 @@
     },
     "project_action_failed": {
       "message": "Failed to {action} project {name}: {error}"
+    },
+    "prune_failed": {
+      "message": "Failed to prune environment {name}: {error}"
     }
   }
 }

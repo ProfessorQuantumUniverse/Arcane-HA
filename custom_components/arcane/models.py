@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from .const import (
     ENVIRONMENT_STATUS_ONLINE,
+    HEALTH_HEALTHY,
+    HEALTH_STARTING,
+    HEALTH_UNHEALTHY,
     PROJECT_STATE_PARTIALLY_RUNNING,
     PROJECT_STATE_RUNNING,
     STATE_RUNNING,
 )
+
+# Docker puts the health of a container and the exit code of a stopped one into
+# the status line, and the container list carries nothing else about either.
+_HEALTH_PATTERN = re.compile(r"\((healthy|unhealthy|health: starting)\)")
+_EXIT_CODE_PATTERN = re.compile(r"^Exited \((\d+)\)")
 
 
 def _container_name(payload: dict[str, Any]) -> str:
@@ -21,6 +30,23 @@ def _container_name(payload: dict[str, Any]) -> str:
         if isinstance(name, str) and name.strip("/"):
             return name.strip("/")
     return str(payload.get("id", ""))[:12]
+
+
+def _health(status: str) -> str | None:
+    """Return the health Docker reports in a status line, if it reports one."""
+    if (match := _HEALTH_PATTERN.search(status)) is None:
+        return None
+    found = match.group(1)
+    if found == "health: starting":
+        return HEALTH_STARTING
+    return HEALTH_UNHEALTHY if found == HEALTH_UNHEALTHY else HEALTH_HEALTHY
+
+
+def _exit_code(status: str) -> int | None:
+    """Return the exit code of a stopped container, if the status carries one."""
+    if (match := _EXIT_CODE_PATTERN.match(status.strip())) is None:
+        return None
+    return int(match.group(1))
 
 
 def _version(value: Any) -> str | None:
@@ -58,6 +84,8 @@ class ArcaneContainer:
     update_available: bool
     installed_version: str | None
     latest_version: str | None
+    health: str | None
+    exit_code: int | None
     project: str | None
     service: str | None
 
@@ -66,24 +94,34 @@ class ArcaneContainer:
         """Return whether the container is currently running."""
         return self.state == STATE_RUNNING
 
+    @property
+    def is_healthy(self) -> bool | None:
+        """Return the health of the container, or None if it reports none."""
+        if self.health is None:
+            return None
+        return self.health == HEALTH_HEALTHY
+
     @classmethod
     def from_api(cls, payload: dict[str, Any]) -> ArcaneContainer:
         """Build a container from an Arcane container summary."""
         labels = payload.get("labels") or {}
         update_info = payload.get("updateInfo") or {}
         image = str(payload.get("image") or "")
+        status = str(payload.get("status") or "")
         installed = _version(update_info.get("currentVersion")) or _image_tag(image)
         latest = _version(update_info.get("latestVersion"))
         return cls(
             id=str(payload.get("id", "")),
             name=_container_name(payload),
             state=str(payload.get("state") or "unknown"),
-            status=str(payload.get("status") or ""),
+            status=status,
             image=image,
             created=_created_at(payload.get("created")),
             update_available=bool(update_info.get("hasUpdate")),
             installed_version=installed,
             latest_version=latest or installed,
+            health=_health(status),
+            exit_code=_exit_code(status),
             project=labels.get("com.docker.compose.project"),
             service=labels.get("com.docker.compose.service"),
         )
@@ -120,6 +158,55 @@ class ArcaneProject:
 
 
 @dataclass(slots=True)
+class ArcaneHostStats:
+    """Host resource usage of the machine an environment runs on."""
+
+    cpu_percent: float | None
+    cpu_count: int | None
+    memory_used: int | None
+    memory_total: int | None
+    disk_used: int | None
+    disk_total: int | None
+    hostname: str | None
+
+    @staticmethod
+    def _percent(used: int | None, total: int | None) -> float | None:
+        """Return used as a percentage of total."""
+        if not used or not total:
+            return None
+        return round(used / total * 100, 1)
+
+    @property
+    def memory_percent(self) -> float | None:
+        """Return the share of host memory in use."""
+        return self._percent(self.memory_used, self.memory_total)
+
+    @property
+    def disk_percent(self) -> float | None:
+        """Return the share of host disk space in use."""
+        return self._percent(self.disk_used, self.disk_total)
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any]) -> ArcaneHostStats:
+        """Build host statistics from one WebSocket sample."""
+
+        def number(key: str) -> Any:
+            value = payload.get(key)
+            return value if isinstance(value, (int, float)) else None
+
+        cpu = number("cpuUsage")
+        return cls(
+            cpu_percent=round(float(cpu), 1) if cpu is not None else None,
+            cpu_count=payload.get("cpuCount") or None,
+            memory_used=number("memoryUsage"),
+            memory_total=number("memoryTotal"),
+            disk_used=number("diskUsage"),
+            disk_total=number("diskTotal"),
+            hostname=payload.get("hostname") or None,
+        )
+
+
+@dataclass(slots=True)
 class ArcaneEnvironment:
     """Everything the integration knows about one Arcane environment."""
 
@@ -135,6 +222,7 @@ class ArcaneEnvironment:
     image_counts: dict[str, Any] = field(default_factory=dict)
     volume_counts: dict[str, Any] = field(default_factory=dict)
     network_counts: dict[str, Any] = field(default_factory=dict)
+    host_stats: ArcaneHostStats | None = None
 
     @property
     def is_online(self) -> bool:
@@ -170,6 +258,20 @@ class ArcaneEnvironment:
     def projects_total(self) -> int:
         """Return the total number of projects."""
         return len(self.projects)
+
+    @property
+    def containers_unhealthy(self) -> int:
+        """Return the number of containers reporting an unhealthy check."""
+        return sum(1 for item in self.containers.values() if item.is_healthy is False)
+
+    def project_id_for(self, name: str | None) -> str | None:
+        """Return the ID of the project with this compose name, if tracked."""
+        if not name:
+            return None
+        for project in self.projects.values():
+            if project.name == name:
+                return project.id
+        return None
 
 
 @dataclass(slots=True)
