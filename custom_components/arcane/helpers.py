@@ -39,18 +39,20 @@ def async_setup_entities(
                 if key not in known:
                     known.add(key)
                     new_entities.extend(environments(environment_id))
-            if containers is not None:
-                for name in environment.containers:
-                    key = ("container", environment_id, name)
-                    if key not in known:
-                        known.add(key)
-                        new_entities.extend(containers(environment_id, name))
+            # Projects come before containers so a project device already
+            # exists when a container of that project points at it.
             if projects is not None:
                 for project_id in environment.projects:
                     key = ("project", environment_id, project_id)
                     if key not in known:
                         known.add(key)
                         new_entities.extend(projects(environment_id, project_id))
+            if containers is not None:
+                for name in environment.containers:
+                    key = ("container", environment_id, name)
+                    if key not in known:
+                        known.add(key)
+                        new_entities.extend(containers(environment_id, name))
         if new_entities:
             async_add_entities(new_entities)
 

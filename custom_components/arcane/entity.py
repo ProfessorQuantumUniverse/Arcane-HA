@@ -7,7 +7,12 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER
+from .const import (
+    CONF_ENTITY_PREFIX,
+    CONF_NEST_CONTAINERS,
+    DOMAIN,
+    MANUFACTURER,
+)
 from .coordinator import ArcaneCoordinator
 from .models import ArcaneContainer, ArcaneEnvironment, ArcaneProject
 
@@ -28,6 +33,17 @@ class ArcaneEntity(CoordinatorEntity[ArcaneCoordinator]):
     def _configuration_url(self) -> str:
         """Return the URL of the Arcane instance backing this entity."""
         return str(self.coordinator.config_entry.data[CONF_URL]).rstrip("/")
+
+    def _device_name(self, kind: str, name: str) -> str:
+        """Return the device name, prefixed with its kind when asked for.
+
+        A container and a compose project regularly carry the same name. Home
+        Assistant builds entity IDs from the device name, so without the prefix
+        the second device of that name only gets ``_2`` suffixed entity IDs.
+        """
+        if not self.coordinator.option(CONF_ENTITY_PREFIX):
+            return name
+        return f"{kind} {name}"
 
 
 class ArcaneEnvironmentEntity(ArcaneEntity):
@@ -88,10 +104,31 @@ class ArcaneContainerEntity(ArcaneEntity):
             },
             manufacturer=MANUFACTURER,
             model="Container",
-            name=container_name,
-            via_device=(DOMAIN, f"{entry_id}_{environment_id}"),
+            name=self._device_name("Container", container_name),
+            via_device=(DOMAIN, self._via_device_id()),
             configuration_url=f"{self._configuration_url}/containers",
         )
+
+    def _via_device_id(self) -> str:
+        """Return the device this container hangs below.
+
+        Containers of a compose project are nested under the project device so
+        the device page shows the stack it belongs to; everything else hangs
+        directly below its environment.
+        """
+        entry_id = self.coordinator.config_entry.entry_id
+        environment_device = f"{entry_id}_{self.environment_id}"
+        if not self.coordinator.option(CONF_NEST_CONTAINERS):
+            return environment_device
+
+        container = self.container
+        environment = self.coordinator.data.environments.get(self.environment_id)
+        if container is None or environment is None:
+            return environment_device
+        project_id = environment.project_id_for(container.project)
+        if project_id is None:
+            return environment_device
+        return f"{environment_device}_project_{project_id}"
 
     @property
     def container(self) -> ArcaneContainer | None:
@@ -130,7 +167,7 @@ class ArcaneProjectEntity(ArcaneEntity):
             identifiers={(DOMAIN, f"{entry_id}_{environment_id}_project_{project_id}")},
             manufacturer=MANUFACTURER,
             model="Compose project",
-            name=project.name if project else project_id,
+            name=self._device_name("Project", project.name if project else project_id),
             via_device=(DOMAIN, f"{entry_id}_{environment_id}"),
             configuration_url=f"{self._configuration_url}/projects/{project_id}",
         )

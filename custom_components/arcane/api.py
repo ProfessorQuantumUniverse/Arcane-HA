@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from http import HTTPStatus
 from typing import Any, Final
 from urllib.parse import quote, urlsplit
 
-from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
+from aiohttp import (
+    ClientError,
+    ClientResponse,
+    ClientSession,
+    ClientTimeout,
+    ClientWebSocketResponse,
+    WSMsgType,
+    WSServerHandshakeError,
+)
 from homeassistant.util.json import json_loads
 from yarl import URL
 
@@ -19,7 +28,11 @@ ALLOWED_SCHEMES: Final = ("http", "https")
 
 # Only these actions may be built into a request path.
 CONTAINER_ACTIONS: Final = ("start", "stop", "restart", "redeploy")
-PROJECT_ACTIONS: Final = ("up", "down", "restart")
+PROJECT_ACTIONS: Final = ("up", "down", "restart", "redeploy")
+
+# Arcane answers these project operations with a newline delimited log stream
+# instead of a JSON envelope.
+STREAMING_PROJECT_ACTIONS: Final = ("up", "redeploy")
 
 # Arcane paginates every list endpoint; ``-1`` asks for the full set.
 _ALL_ITEMS: Final = "-1"
@@ -34,11 +47,18 @@ DEPLOY_TIMEOUT: Final = 900
 # Arcane API and should not be allowed to exhaust memory.
 MAX_RESPONSE_BYTES: Final = 32 * 1024 * 1024
 
+# A host statistics sample is a few hundred bytes.
+MAX_WS_MESSAGE_BYTES: Final = 256 * 1024
+HOST_STATS_TIMEOUT: Final = 20
+# Asked for but never used: the socket is closed after the first sample.
+HOST_STATS_INTERVAL: Final = 60
+
 # Only the first part of an error body is quoted back, with control characters
 # removed so a hostile reply cannot forge log lines.
 _ERROR_BODY_CHARS: Final = 200
 _ERROR_BODY_BYTES: Final = 4096
 _READ_CHUNK_BYTES: Final = 64 * 1024
+_MAX_STREAM_LINE_BYTES: Final = 1024 * 1024
 
 
 class ArcaneError(Exception):
@@ -85,11 +105,53 @@ def validate_url(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}{parts.path.rstrip('/')}"
 
 
+def _stream_frame(line: bytes) -> dict[str, Any] | None:
+    """Return one decoded frame of a log stream, or None if it is not one."""
+    if not line.strip():
+        return None
+    try:
+        frame = json_loads(line)
+    except ValueError:
+        return None
+    return frame if isinstance(frame, dict) else None
+
+
+def _stream_failure(line: bytes) -> str | None:
+    """Return the error a stream frame reports, if it reports one."""
+    frame = _stream_frame(line)
+    if frame is None or (failure := frame.get("error")) is None:
+        return None
+    return _sanitize(str(failure))
+
+
+def _stream_done(line: bytes) -> bool:
+    """Return whether this frame is the one that closes a successful stream."""
+    frame = _stream_frame(line)
+    return frame is not None and frame.get("done") is True
+
+
 def _sanitize(text: str) -> str:
     """Return text that is safe to put into an error message or log line."""
     return "".join(
         char if char.isprintable() else " " for char in text[:_ERROR_BODY_CHARS]
     ).strip()
+
+
+def _reject_redirected_socket(socket: ClientWebSocketResponse, url: URL) -> None:
+    """Refuse a WebSocket that was reached through a redirect.
+
+    aiohttp offers no way to turn redirects off for the WebSocket handshake, so
+    the hop is detected afterwards: a redirect would already have replayed the
+    API key header against the host it pointed at, which is exactly what the
+    REST side refuses. The private attribute is read defensively; the test
+    suite covers this path so a rename in aiohttp fails loudly there.
+    """
+    response = getattr(socket, "_response", None)
+    if response is not None and getattr(response, "history", ()):
+        raise ArcaneResponseError(
+            f"{url} redirected to another address. Configure the address "
+            f"Arcane is actually served on."
+        )
 
 
 class ArcaneClient:
@@ -209,6 +271,61 @@ class ArcaneClient:
         except ValueError as err:
             raise ArcaneResponseError(f"Invalid JSON from {url}") from err
 
+    async def _stream(self, url: URL, *, timeout: int) -> None:
+        """Run an operation that answers with a newline delimited log stream.
+
+        The stream ends with ``{"done": true}`` on success or carries an
+        ``{"error": ...}`` line on failure. Log lines in between are dropped:
+        Home Assistant only needs to know whether the operation worked.
+        """
+        try:
+            response = await self._session.request(
+                "POST",
+                url,
+                headers={HEADER_API_KEY: self._api_key},
+                timeout=ClientTimeout(total=timeout),
+                allow_redirects=False,
+            )
+        except TimeoutError as err:
+            raise ArcaneConnectionError(f"Timeout while calling {url}") from err
+        except ClientError as err:
+            raise ArcaneConnectionError(f"Error while calling {url}: {err}") from err
+
+        async with response:
+            if response.status >= HTTPStatus.MULTIPLE_CHOICES:
+                await self._decode(response, url)
+                return
+
+            done = False
+            size = 0
+            buffer = b""
+            try:
+                async for chunk in response.content.iter_chunked(_READ_CHUNK_BYTES):
+                    size += len(chunk)
+                    if size > MAX_RESPONSE_BYTES:
+                        raise ArcaneResponseError(f"Reply from {url} is too large")
+                    buffer += chunk
+                    lines = buffer.split(b"\n")
+                    # Lines are split here rather than read with readline so a
+                    # reply without newlines cannot grow the buffer unbounded.
+                    buffer = lines.pop()
+                    if len(buffer) > _MAX_STREAM_LINE_BYTES:
+                        raise ArcaneResponseError(f"Reply from {url} is malformed")
+                    for line in lines:
+                        if (failure := _stream_failure(line)) is not None:
+                            raise ArcaneResponseError(failure)
+                        done = done or _stream_done(line)
+            except ClientError as err:
+                raise ArcaneConnectionError(
+                    f"Error while reading {url}: {err}"
+                ) from err
+            if (failure := _stream_failure(buffer)) is not None:
+                raise ArcaneResponseError(failure)
+            done = done or _stream_done(buffer)
+
+        if not done:
+            raise ArcaneResponseError(f"{url} ended without reporting that it finished")
+
     async def _get_data(self, url: URL, params: dict[str, Any] | None = None) -> Any:
         """Return the ``data`` member of an Arcane API envelope."""
         payload = await self._request("GET", url, params=params)
@@ -299,11 +416,85 @@ class ArcaneClient:
     async def async_project_action(
         self, environment_id: str, project_id: str, action: str
     ) -> None:
-        """Bring a compose project up or down, or restart it."""
+        """Bring a compose project up or down, restart or redeploy it."""
         if action not in PROJECT_ACTIONS:
             raise ValueError(f"Unsupported project action: {action}")
-        await self._request(
+        url = self._url("environments", environment_id, "projects", project_id, action)
+        if action in STREAMING_PROJECT_ACTIONS:
+            await self._stream(url, timeout=DEPLOY_TIMEOUT)
+            return
+        await self._request("POST", url, timeout=ACTION_TIMEOUT)
+
+    async def async_prune(
+        self, environment_id: str, *, unused_images: bool
+    ) -> dict[str, Any]:
+        """Remove unused images, networks and build cache.
+
+        Containers and volumes are never included: pruning those destroys data
+        that cannot be pulled again.
+        """
+        payload = {
+            "images": {"mode": "all" if unused_images else "dangling"},
+            "networks": {"mode": "unused"},
+            "buildCache": {"mode": "unused"},
+        }
+        result = await self._request(
             "POST",
-            self._url("environments", environment_id, "projects", project_id, action),
-            timeout=ACTION_TIMEOUT if action == "down" else DEPLOY_TIMEOUT,
+            self._url("environments", environment_id, "system", "prune"),
+            json=payload,
+            timeout=DEPLOY_TIMEOUT,
         )
+        if isinstance(result, dict) and isinstance(result.get("data"), dict):
+            return result["data"]
+        return {}
+
+    async def async_get_host_stats(
+        self, environment_id: str, *, timeout: int = HOST_STATS_TIMEOUT
+    ) -> dict[str, Any]:
+        """Return one host statistics sample.
+
+        Arcane only offers host CPU, memory and disk usage over a WebSocket. It
+        sends the current sample immediately after the handshake, so a single
+        sample is taken and the socket is closed again rather than held open.
+        """
+        url = self._url(
+            "environments", environment_id, "ws", "system", "stats"
+        ).with_query({"interval": str(HOST_STATS_INTERVAL)})
+        try:
+            async with (
+                asyncio.timeout(timeout),
+                # The handshake and the single receive are bounded by the
+                # timeout around this block, which keeps the call free of
+                # aiohttp's shifting per-socket timeout parameters.
+                self._session.ws_connect(
+                    url,
+                    headers={HEADER_API_KEY: self._api_key},
+                    max_msg_size=MAX_WS_MESSAGE_BYTES,
+                    autoclose=True,
+                ) as socket,
+            ):
+                _reject_redirected_socket(socket, url)
+                message = await socket.receive()
+                if message.type is not WSMsgType.TEXT:
+                    raise ArcaneResponseError(
+                        f"Host statistics stream at {url} sent no sample"
+                    )
+                sample = json_loads(message.data)
+        except TimeoutError as err:
+            raise ArcaneConnectionError(f"Timeout while calling {url}") from err
+        except WSServerHandshakeError as err:
+            if err.status == HTTPStatus.UNAUTHORIZED:
+                raise ArcaneAuthenticationError(
+                    f"Arcane rejected the API key for {url}"
+                ) from err
+            if err.status == HTTPStatus.FORBIDDEN:
+                raise ArcanePermissionError(
+                    f"The API key is not allowed to call {url}"
+                ) from err
+            raise ArcaneConnectionError(f"Error while calling {url}: {err}") from err
+        except ClientError as err:
+            raise ArcaneConnectionError(f"Error while calling {url}: {err}") from err
+        except ValueError as err:
+            raise ArcaneResponseError(f"Invalid JSON from {url}") from err
+
+        return sample if isinstance(sample, dict) else {}

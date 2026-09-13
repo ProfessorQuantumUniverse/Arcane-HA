@@ -37,6 +37,17 @@ CONTAINERS_PAYLOAD = [
         },
     },
     {
+        "id": "beefcafe",
+        "names": ["/uptime-kuma"],
+        "image": "louislam/uptime-kuma:2",
+        "imageId": "sha256:3",
+        "command": "/entry",
+        "created": 1735689600,
+        "state": "running",
+        "status": "Up 26 hours (healthy)",
+        "labels": {},
+    },
+    {
         "id": "dead10cc",
         "names": ["/whoami"],
         "image": "traefik/whoami:latest",
@@ -69,6 +80,15 @@ IMAGE_COUNTS = {
 VOLUME_COUNTS = {"total": 7, "unused": 1, "inuse": 6}
 NETWORK_COUNTS = {"total": 4, "unused": 0, "inuse": 4}
 DOCKER_INFO = {"ServerVersion": "27.3.1", "apiVersion": "1.47", "os": "linux"}
+HOST_STATS = {
+    "cpuUsage": 12.5,
+    "memoryUsage": 4294967296,
+    "memoryTotal": 17179869184,
+    "diskUsage": 100000000000,
+    "diskTotal": 500000000000,
+    "cpuCount": 8,
+    "hostname": "docker-host",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -109,4 +129,6 @@ def mock_client() -> Generator[AsyncMock]:
         client.async_get_volume_counts.return_value = VOLUME_COUNTS
         client.async_get_network_counts.return_value = NETWORK_COUNTS
         client.async_get_docker_info.return_value = DOCKER_INFO
+        client.async_get_host_stats.return_value = HOST_STATS
+        client.async_prune.return_value = {"spaceReclaimed": 1024}
         yield client
