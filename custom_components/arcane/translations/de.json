@@ -271,6 +271,9 @@
     "update": {
       "image_update": {
         "name": "Image Update"
+      },
+      "arcane_update": {
+        "name": "Arcane"
       }
     }
   },
@@ -286,6 +289,9 @@
     },
     "prune_failed": {
       "message": "Prune für Environment {name} fehlgeschlagen: {error}"
+    },
+    "upgrade_failed": {
+      "message": "Upgrade von Arcane auf {name} fehlgeschlagen: {error}"
     }
   }
 }

@@ -24,6 +24,7 @@ One device per environment, one per container and one per Compose project.
 | Projects / Projects running | sensor | Compose project counts |
 | Images / Unused images / Image storage | sensor | Image usage from Arcane |
 | Volumes / Unused volumes / Networks | sensor | Volume and network usage |
+| Arcane | update | The Arcane instance itself, installs by asking it to upgrade |
 | Host CPU / Host memory / Host disk | sensor | Usage of the machine, off by default |
 | Docker version / Arcane version | sensor | Diagnostic, disabled by default |
 | Prune unused | button | Off by default, see below |
@@ -103,7 +104,8 @@ Add these for the switches, buttons and update installs:
 `containers:start`, `containers:stop`, `containers:restart`, `containers:redeploy`,
 `projects:deploy`, `projects:down`, `projects:restart`
 
-Host statistics need `system:read`, the prune button needs `system:prune`.
+Host statistics need `system:read`, the prune button needs `system:prune`, and installing
+the Arcane update needs `system:upgrade`.
 
 A key without the action permissions still works. The entities are created and the
 actions fail with a clear error. Only `environments:list` is required for setup to
@@ -131,7 +133,7 @@ sections.
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| Image update entities | on | Offer the per container update entity |
+| Image update entities | on | Offer the update entities for containers and for Arcane |
 | Health binary sensors | on | Add a Healthy sensor to containers that define a health check |
 | Prefix device names with their kind | on | Name devices `Container x` and `Project x` |
 | Nest containers under their project | on | Show a container as a child of its Compose project |
@@ -157,6 +159,25 @@ suffixed IDs. With the prefix on, the devices are named `Container kopia` and
 
 Entity IDs that already exist are never rewritten. An existing installation keeps its
 current IDs and only newly discovered containers and projects use the new scheme.
+
+## Updates
+
+Both update entities show up under **Settings > Updates** alongside Home Assistant's own
+updates, the same place a core or add-on update appears:
+
+- one per container, comparing the running image against what Arcane's image update check
+  found,
+- one per environment for Arcane itself, with the release notes and a link to the
+  release page.
+
+Installing a container update runs Arcane's redeploy. Installing the Arcane update asks
+Arcane to pull its own newer image and restart, so the instance and every entity of this
+integration are briefly unavailable afterwards.
+
+An entity only appears in that panel while it actually has an update and while it can be
+installed, so with **Allow control from Home Assistant** off the entities still report
+their versions but stay out of the panel. Switching **Image update entities** off removes
+both kinds entirely.
 
 ## Host statistics
 

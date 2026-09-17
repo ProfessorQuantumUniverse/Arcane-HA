@@ -10,7 +10,21 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.arcane.const import DOMAIN
 
-VERSION_PAYLOAD = {"currentVersion": "1.4.0", "revision": "abcdef"}
+VERSION_PAYLOAD = {
+    "currentVersion": "1.4.0",
+    "newestVersion": "1.5.0",
+    "updateAvailable": True,
+    "releaseUrl": "https://github.com/getarcaneapp/arcane/releases/tag/1.5.0",
+    "releaseNotes": "## What's new\n\nFaster project list.",
+    "releasedAt": "2026-09-01T10:00:00Z",
+    "revision": "abcdef",
+}
+
+REMOTE_VERSION_PAYLOAD = {
+    "currentVersion": "1.3.0",
+    "updateAvailable": False,
+    "revision": "123456",
+}
 
 ENVIRONMENTS_PAYLOAD = [
     {"id": "0", "name": "Local", "status": "online", "enabled": True},
@@ -130,5 +144,6 @@ def mock_client() -> Generator[AsyncMock]:
         client.async_get_network_counts.return_value = NETWORK_COUNTS
         client.async_get_docker_info.return_value = DOCKER_INFO
         client.async_get_host_stats.return_value = HOST_STATS
+        client.async_get_environment_version.return_value = REMOTE_VERSION_PAYLOAD
         client.async_prune.return_value = {"spaceReclaimed": 1024}
         yield client
