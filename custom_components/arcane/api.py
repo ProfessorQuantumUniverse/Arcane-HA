@@ -340,6 +340,27 @@ class ArcaneClient:
             raise ArcaneResponseError("Unexpected payload for the version endpoint")
         return payload
 
+    async def async_get_environment_version(
+        self, environment_id: str
+    ) -> dict[str, Any]:
+        """Return the Arcane version and update state of one environment."""
+        data = await self._get_data(
+            self._url("environments", environment_id, "version")
+        )
+        return data if isinstance(data, dict) else {}
+
+    async def async_upgrade(self, environment_id: str) -> None:
+        """Upgrade the Arcane instance of an environment.
+
+        Arcane pulls its own newer image and restarts itself, so the call is
+        accepted and then carried out in the background.
+        """
+        await self._request(
+            "POST",
+            self._url("environments", environment_id, "system", "upgrade"),
+            timeout=ACTION_TIMEOUT,
+        )
+
     async def async_get_environments(self) -> list[dict[str, Any]]:
         """Return every environment the API key may see."""
         data = await self._get_data(self._url("environments"), {"limit": _ALL_ITEMS})

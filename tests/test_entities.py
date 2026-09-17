@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+from homeassistant.components.update import UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -483,3 +484,116 @@ async def test_events_can_be_switched_off(
     await hass.async_block_till_done()
 
     assert not events
+
+
+async def test_arcane_update_entity(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Arcane itself reports its own update, ready for the updates panel."""
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get("update.local_arcane")
+    assert state.state == STATE_ON
+    assert state.attributes["installed_version"] == "1.4.0"
+    assert state.attributes["latest_version"] == "1.5.0"
+    assert state.attributes["title"] == "Arcane"
+    assert state.attributes["release_url"].endswith("/1.5.0")
+    assert "Faster project list." in state.attributes["release_summary"]
+    # The updates panel only lists entities that can actually be installed.
+    assert state.attributes["supported_features"] & UpdateEntityFeature.INSTALL
+
+    assert state.attributes["supported_features"] & UpdateEntityFeature.RELEASE_NOTES
+
+    notes = await hass.services.async_call(
+        "update",
+        "install",
+        {ATTR_ENTITY_ID: "update.local_arcane"},
+        blocking=True,
+    )
+    assert notes is None
+    mock_client.async_upgrade.assert_awaited_once_with("0")
+
+
+async def test_arcane_update_falls_back_to_the_digest(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A digest tracking instance still reads as having an update."""
+    mock_client.async_get_version.return_value = {
+        "currentVersion": "1.4.0",
+        "updateAvailable": True,
+        "newestDigest": "sha256:9f8e7d6c5b4a3210fedcba9876543210",
+    }
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get("update.local_arcane")
+    assert state.state == STATE_ON
+    assert state.attributes["latest_version"] == "9f8e7d6c5b4a"
+    # Nothing to show, so the release notes button is not offered either.
+    assert not state.attributes["supported_features"] & (
+        UpdateEntityFeature.RELEASE_NOTES
+    )
+
+
+async def test_arcane_update_without_an_update(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """An up to date instance stays off and out of the updates panel."""
+    mock_client.async_get_version.return_value = {
+        "currentVersion": "1.5.0",
+        "newestVersion": "1.5.0",
+        "updateAvailable": False,
+    }
+    await _setup(hass, mock_config_entry)
+
+    assert hass.states.get("update.local_arcane").state == STATE_OFF
+
+
+async def test_container_update_carries_the_image_as_title(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The updates panel shows which image an update is about."""
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get("update.container_homeassistant_image_update")
+    assert state.attributes["title"] == "ghcr.io/home-assistant/home-assistant"
+
+
+async def test_only_remote_environments_cost_a_version_request(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The local environment reuses the version already fetched."""
+    await _setup(hass, mock_config_entry)
+    mock_client.async_get_environment_version.assert_not_called()
+
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    mock_client.async_get_environments.return_value = [
+        {"id": "0", "name": "Local", "status": "online", "enabled": True},
+        {"id": "7", "name": "Remote", "status": "online", "enabled": True},
+    ]
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    mock_client.async_get_environment_version.assert_awaited_once_with("7")
+    assert hass.states.get("update.remote_arcane").state == STATE_OFF
+    assert hass.states.get("update.local_arcane").state == STATE_ON
+
+
+async def test_update_entities_can_be_switched_off(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Switching update entities off removes the Arcane one as well."""
+    await _setup(hass, mock_config_entry, {CONF_UPDATE_ENTITIES: False})
+
+    assert hass.states.get("update.local_arcane") is None
+    assert hass.states.get("update.container_homeassistant_image_update") is None
+
+
+async def test_read_only_mode_keeps_updates_visible_but_not_installable(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Without control the update still reports, it just cannot be installed."""
+    await _setup(hass, mock_config_entry, {CONF_ALLOW_CONTROL: False})
+
+    state = hass.states.get("update.local_arcane")
+    assert state.state == STATE_ON
+    assert not state.attributes["supported_features"] & UpdateEntityFeature.INSTALL

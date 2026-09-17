@@ -23,6 +23,7 @@ from .const import (
     CONF_MONITOR_CONTAINERS,
     CONF_MONITOR_PROJECTS,
     CONF_MONITOR_RESOURCES,
+    CONF_UPDATE_ENTITIES,
     DEFAULT_OPTIONS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -30,6 +31,7 @@ from .const import (
     EVENT_CONTAINER_STATE,
     EVENT_PROJECT_STATE,
     EXIT_CODE_SIGKILL,
+    LOCAL_ENVIRONMENT_ID,
     STATE_RUNNING,
 )
 from .models import (
@@ -38,6 +40,7 @@ from .models import (
     ArcaneEnvironment,
     ArcaneHostStats,
     ArcaneProject,
+    ArcaneVersion,
 )
 
 if TYPE_CHECKING:
@@ -95,7 +98,7 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
         ]
 
         results = await asyncio.gather(
-            *(self._async_update_environment(item) for item in wanted)
+            *(self._async_update_environment(item, version_info) for item in wanted)
         )
 
         data = ArcaneData(
@@ -106,24 +109,12 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             self._fire_events(data)
         return data
 
-    async def _async_update_environment(
-        self, payload: dict[str, Any]
-    ) -> ArcaneEnvironment:
-        """Fetch the resources of a single environment.
+    def _environment_calls(self, environment_id: str) -> dict[str, Any]:
+        """Return the requests to make for one environment, by result name.
 
-        Every resource is fetched on its own: a remote environment can be
-        unreachable, and an API key may be allowed to list containers but not
-        volumes. Neither should fail the refresh of the whole instance, so a
-        failure only leaves the affected part of the environment empty.
+        Only what the options ask for is requested, so switching a part off
+        stops its traffic instead of only hiding its entities.
         """
-        environment_id = str(payload["id"])
-        environment = ArcaneEnvironment(
-            id=environment_id,
-            name=str(payload.get("name") or f"Environment {environment_id}"),
-            status=str(payload.get("status") or "unknown"),
-            enabled=bool(payload.get("enabled", True)),
-        )
-
         calls: dict[str, Any] = {}
         if self.option(CONF_MONITOR_CONTAINERS):
             calls["containers"] = self.client.async_get_containers(
@@ -140,19 +131,15 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             calls["docker"] = self.client.async_get_docker_info(environment_id)
         if self.option(CONF_HOST_STATS):
             calls["host"] = self.client.async_get_host_stats(environment_id)
+        if self.option(CONF_UPDATE_ENTITIES) and environment_id != LOCAL_ENVIRONMENT_ID:
+            # The local environment is the instance that was already asked for
+            # its version, so only remote ones cost a request here.
+            calls["version"] = self.client.async_get_environment_version(environment_id)
+        return calls
 
-        if not calls:
-            environment.reachable = True
-            return environment
-
-        results = dict(
-            zip(
-                calls,
-                await asyncio.gather(*calls.values(), return_exceptions=True),
-                strict=True,
-            )
-        )
-
+    @staticmethod
+    def _reraise_fatal(results: dict[str, Any]) -> None:
+        """Let an expired key and anything unexpected fail the whole refresh."""
         for result in results.values():
             if isinstance(result, ArcaneAuthenticationError):
                 raise ConfigEntryAuthFailed(str(result))
@@ -161,38 +148,86 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             ):
                 raise result
 
-        # Arcane answered at least once, so the environment itself is up even
-        # if some of the calls were refused.
-        environment.reachable = any(
-            not isinstance(result, ArcaneError) for result in results.values()
+    async def _async_update_environment(
+        self, payload: dict[str, Any], version_info: dict[str, Any]
+    ) -> ArcaneEnvironment:
+        """Fetch the resources of a single environment.
+
+        Every resource is fetched on its own: a remote environment can be
+        unreachable, and an API key may be allowed to list containers but not
+        volumes. Neither should fail the refresh of the whole instance, so a
+        failure only leaves the affected part of the environment empty.
+        """
+        environment_id = str(payload["id"])
+        environment = ArcaneEnvironment(
+            id=environment_id,
+            name=str(payload.get("name") or f"Environment {environment_id}"),
+            status=str(payload.get("status") or "unknown"),
+            enabled=bool(payload.get("enabled", True)),
         )
 
-        containers = self._value(results.get("containers"), environment_id, [])
-        projects = self._value(results.get("projects"), environment_id, [])
+        results: dict[str, Any] = {}
+        if calls := self._environment_calls(environment_id):
+            results = dict(
+                zip(
+                    calls,
+                    await asyncio.gather(*calls.values(), return_exceptions=True),
+                    strict=True,
+                )
+            )
+            self._reraise_fatal(results)
+            # Arcane answered at least once, so the environment itself is up
+            # even if some of the calls were refused.
+            environment.reachable = any(
+                not isinstance(result, ArcaneError) for result in results.values()
+            )
+        else:
+            environment.reachable = True
+
+        self._apply_results(environment, results, version_info)
+        return environment
+
+    def _apply_results(
+        self,
+        environment: ArcaneEnvironment,
+        results: dict[str, Any],
+        version_info: dict[str, Any],
+    ) -> None:
+        """Fill an environment with whatever the requests brought back."""
+        environment_id = environment.id
+
+        def value(name: str, default: Any) -> Any:
+            return self._value(results.get(name), environment_id, default)
+
         environment.containers = {
             container.name: container
-            for container in (ArcaneContainer.from_api(item) for item in containers)
+            for container in (
+                ArcaneContainer.from_api(item) for item in value("containers", [])
+            )
             if container.name
         }
         environment.projects = {
             project.id: project
-            for project in (ArcaneProject.from_api(item) for item in projects)
+            for project in (
+                ArcaneProject.from_api(item) for item in value("projects", [])
+            )
             if project.id
         }
-        environment.image_counts = self._value(
-            results.get("images"), environment_id, {}
-        )
-        environment.volume_counts = self._value(
-            results.get("volumes"), environment_id, {}
-        )
-        environment.network_counts = self._value(
-            results.get("networks"), environment_id, {}
-        )
-        environment.docker_info = self._value(results.get("docker"), environment_id, {})
+        environment.image_counts = value("images", {})
+        environment.volume_counts = value("volumes", {})
+        environment.network_counts = value("networks", {})
+        environment.docker_info = value("docker", {})
         environment.docker_version = environment.docker_info.get("ServerVersion")
-        if host := self._value(results.get("host"), environment_id, {}):
+        if host := value("host", {}):
             environment.host_stats = ArcaneHostStats.from_api(host)
-        return environment
+        if self.option(CONF_UPDATE_ENTITIES):
+            version = (
+                version_info
+                if environment_id == LOCAL_ENVIRONMENT_ID
+                else value("version", {})
+            )
+            if version:
+                environment.arcane_version = ArcaneVersion.from_api(version)
 
     def _fire_events(self, data: ArcaneData) -> None:
         """Announce what changed since the previous refresh on the event bus.

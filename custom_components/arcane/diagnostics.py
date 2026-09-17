@@ -36,6 +36,11 @@ async def async_get_config_entry_diagnostics(
                 "image_counts": environment.image_counts,
                 "volume_counts": environment.volume_counts,
                 "network_counts": environment.network_counts,
+                "arcane_version": (
+                    asdict(environment.arcane_version)
+                    if environment.arcane_version is not None
+                    else None
+                ),
                 "host_stats": (
                     asdict(environment.host_stats)
                     if environment.host_stats is not None

@@ -32,6 +32,13 @@ def _container_name(payload: dict[str, Any]) -> str:
     return str(payload.get("id", ""))[:12]
 
 
+def _short_digest(value: Any) -> str | None:
+    """Return a readable short form of an image digest."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip().removeprefix("sha256:")[:12] or None
+
+
 def _health(status: str) -> str | None:
     """Return the health Docker reports in a status line, if it reports one."""
     if (match := _HEALTH_PATTERN.search(status)) is None:
@@ -158,6 +165,41 @@ class ArcaneProject:
 
 
 @dataclass(slots=True)
+class ArcaneVersion:
+    """Version and update state of an Arcane instance."""
+
+    installed: str | None
+    latest: str | None
+    update_available: bool
+    release_url: str | None
+    release_notes: str | None
+    released_at: str | None
+
+    @classmethod
+    def from_api(cls, payload: dict[str, Any]) -> ArcaneVersion:
+        """Build the version state from an Arcane version payload."""
+        installed = _version(payload.get("currentVersion"))
+        latest = _version(payload.get("newestVersion"))
+        update_available = bool(payload.get("updateAvailable"))
+        if latest is None and update_available:
+            # An instance that tracks a digest rather than a release reports an
+            # update without naming a version. The digest is what changed, so
+            # it stands in as the newer version; Home Assistant needs the two
+            # to differ for the entity to read as "update available".
+            latest = _short_digest(payload.get("newestDigest"))
+        return cls(
+            installed=installed,
+            # Home Assistant compares the two, so an unknown newest version has
+            # to read as "same as installed" rather than as an update.
+            latest=latest or installed,
+            update_available=update_available,
+            release_url=_version(payload.get("releaseUrl")),
+            release_notes=_version(payload.get("releaseNotes")),
+            released_at=_version(payload.get("releasedAt")),
+        )
+
+
+@dataclass(slots=True)
 class ArcaneHostStats:
     """Host resource usage of the machine an environment runs on."""
 
@@ -223,6 +265,7 @@ class ArcaneEnvironment:
     volume_counts: dict[str, Any] = field(default_factory=dict)
     network_counts: dict[str, Any] = field(default_factory=dict)
     host_stats: ArcaneHostStats | None = None
+    arcane_version: ArcaneVersion | None = None
 
     @property
     def is_online(self) -> bool:
