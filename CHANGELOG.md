@@ -1,10 +1,13 @@
 # Changelog
 
-Versions follow [semantic versioning](https://semver.org/). Nothing is tagged yet, so a
-version is the state of the default branch from the day it landed, which is also what
-HACS installs and shows.
+Versions follow [semantic versioning](https://semver.org/). Every version is a git tag
+and a published GitHub release, and that release is what HACS installs. The version in
+`custom_components/arcane/manifest.json` is the one being released; the release workflow
+refuses a tag that disagrees with it or with this file.
 
 ## 0.5.0 (2026-09-19)
+
+First tagged release.
 
 ### Added
 
@@ -16,6 +19,16 @@ HACS installs and shows.
   them. The same list is on the permissions page and in the diagnostics download.
 - An action Arcane refuses now names the permission it needed instead of reporting a
   bare 403.
+
+### Changed
+
+- The integration now carries Arcane's own logo instead of a stand-in, in both the
+  Home Assistant integration list and HACS. The `@2x` variants ship with the integration
+  as well, so the icon stays sharp on a high resolution screen.
+- Tagging a version publishes it. The release workflow checks the tag against the
+  manifest and the changelog, runs the tests and writes the release notes from this
+  file, and HACS no longer offers the default branch as something to install.
+- The README says the same things in fewer words.
 
 ## 0.4.0 (2026-09-17)
 

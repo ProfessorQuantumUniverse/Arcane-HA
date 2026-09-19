@@ -110,7 +110,7 @@ def test_host_stats_alone_need_system_read() -> None:
 def test_format_permissions() -> None:
     """Permissions are rendered as code, and an empty list as a dash."""
     assert format_permissions(["a:b", "c:d"]) == "`a:b`, `c:d`"
-    assert format_permissions([]) == "—"
+    assert format_permissions([]) == "-"
 
 
 async def test_options_flow_lists_permissions(
@@ -128,7 +128,7 @@ async def test_options_flow_lists_permissions(
     placeholders = result["description_placeholders"]
     assert "`containers:list`" in placeholders["monitoring"]
     assert "`system:upgrade`" in placeholders["control"]
-    assert placeholders["missing"] == "—"
+    assert placeholders["missing"] == "-"
 
     # Submitting the page returns to the menu without changing anything.
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})

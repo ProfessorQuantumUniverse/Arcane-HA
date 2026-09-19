@@ -1,222 +1,157 @@
-<img src="brands/icon.png" alt="" width="130" align="center" hspace="16">
+<img src="brands/icon.png" alt="" width="120" align="left" hspace="18" vspace="6">
 
 # Arcane for Home Assistant
 
-A Home Assistant integration for [Arcane](https://github.com/getarcaneapp/arcane), the
-modern Docker management UI. It brings your containers and Compose projects into Home
-Assistant as devices you can watch and control, comparable to what the Portainer
-integration does, but built on Arcane's own API.
+Watch and control your Docker containers and Compose projects from Home Assistant,
+through [Arcane](https://github.com/getarcaneapp/arcane).
 
 <br clear="left">
 
-## What you get
+[![HACS](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz)
+[![Release](https://img.shields.io/github/v/release/ProfessorQuantumUniverse/Arcane-HA?display_name=tag&sort=semver)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/releases)
+[![Validate](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml)
+[![Tests](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml)
 
-One device per environment, one per container and one per Compose project.
+You get a device per Arcane environment, per container and per Compose project, with
+switches to start and stop them, buttons to restart and redeploy, sensors for the state
+and the counts, and update entities that appear under **Settings > Updates** when a
+newer image is waiting.
 
-### Environment device
+## Requirements
+
+Home Assistant 2025.2 or newer, an Arcane instance it can reach, and an Arcane API key.
+
+## Install
+
+**HACS:** open the three dot menu, choose **Custom repositories**, add
+`https://github.com/ProfessorQuantumUniverse/Arcane-HA` with category **Integration**,
+install **Arcane** and restart.
+
+**By hand:** copy `custom_components/arcane` into your `config/custom_components/` and
+restart.
+
+## Set up
+
+1. In Arcane, create an API key under **Settings > API keys**.
+2. In Home Assistant, go to **Settings > Devices & services > Add integration** and pick
+   **Arcane**.
+3. Enter the address of your instance, for example `http://192.168.1.10:3552`, and the
+   key.
+
+Use the address Arcane is actually served on. Redirects are deliberately not followed, so
+the API key is never handed to another host. If setup complains about a redirect, use the
+address it points at.
+
+### API key permissions
+
+The integration works out what your setup needs and tells you: open it and choose
+**Configure > API key permissions**. Copy that list into the role behind the key under
+**Settings > Roles** in Arcane. Turning an option off drops its permissions from the
+list.
+
+Monitoring needs `environments:list`, `containers:list`, `projects:list`, `images:list`,
+`volumes:list`, `networks:list` and `system:read`. Controlling things adds
+`containers:start`, `containers:stop`, `containers:restart`, `containers:redeploy`,
+`projects:deploy`, `projects:down` and `projects:restart`. Pruning needs `system:prune`
+and upgrading Arcane itself needs `system:upgrade`.
+
+Only `environments:list` is required. A key without the rest still sets up; the parts it
+cannot reach stay empty and actions fail with an error naming the permission. Whenever
+Arcane refuses a call, the permission lands in a repair under
+**Settings > System > Repairs**, so a key that is too narrow says so.
+
+## Entities
+
+### Environment
 
 | Entity | Type | Notes |
 | --- | --- | --- |
-| Online | binary sensor | Whether Arcane can reach the environment |
-| Containers / Containers running / Containers stopped | sensor | Live counts |
-| Container updates available | sensor | Containers whose image has a newer version |
-| Unhealthy containers | sensor | Containers whose health check is failing |
-| Projects / Projects running | sensor | Compose project counts |
-| Images / Unused images / Image storage | sensor | Image usage from Arcane |
-| Volumes / Unused volumes / Networks | sensor | Volume and network usage |
-| Arcane | update | The Arcane instance itself, installs by asking it to upgrade |
-| Host CPU / Host memory / Host disk | sensor | Usage of the machine, off by default |
-| Docker version / Arcane version | sensor | Diagnostic, disabled by default |
-| Prune unused | button | Off by default, see below |
+| Online | binary sensor | Whether Arcane reaches the environment |
+| Containers, running, stopped | sensor | Live counts |
+| Container updates available | sensor | Containers with a newer image |
+| Unhealthy containers | sensor | Failing health checks |
+| Projects, Projects running | sensor | |
+| Images, Unused images, Image storage | sensor | |
+| Volumes, Unused volumes, Networks | sensor | |
+| Arcane | update | Upgrades the Arcane instance itself |
+| Host CPU, memory, disk | sensor | Off by default |
+| Docker version, Arcane version | sensor | Diagnostic, disabled by default |
+| Prune unused | button | Off by default |
 
-### Container device
+### Container
 
 | Entity | Type | Notes |
 | --- | --- | --- |
-| *(container name)* | switch | On starts, off stops the container |
-| Image update | update | Shows the newer image and installs it with a redeploy |
-| Running | binary sensor | |
-| Healthy | binary sensor | Only for containers that define a health check |
-| Update available | binary sensor | From Arcane's image update check |
-| State | sensor | `running`, `exited`, `paused`, and so on |
-| Status | sensor | The human readable Docker status |
-| Image | sensor | Diagnostic |
-| Created | sensor | Diagnostic, disabled by default |
+| *(container name)* | switch | Starts and stops it |
+| Image update | update | Installs by redeploying onto the newer image |
+| Running, Update available | binary sensor | |
+| Healthy | binary sensor | Only with a health check defined |
+| State, Status | sensor | `running`, `exited`, `paused` and so on |
+| Image, Created | sensor | Diagnostic |
 | Restart | button | |
-| Redeploy | button | Off by default, pulls the image again and recreates |
+| Redeploy | button | Off by default |
 
-### Compose project device
+### Compose project
 
 | Entity | Type | Notes |
 | --- | --- | --- |
 | *(project name)* | switch | On runs `up`, off runs `down` |
-| Running | binary sensor | On while at least one service runs |
-| Update available | binary sensor | |
-| Status | sensor | `running`, `partially running`, `stopped`, and so on |
-| Services / Services running | sensor | |
+| Running, Update available | binary sensor | |
+| Status | sensor | `running`, `partially running`, `stopped` and so on |
+| Services, Services running | sensor | |
 | Restart | button | |
-| Redeploy | button | Off by default, pulls and recreates the whole stack |
+| Redeploy | button | Off by default |
 
-Containers of a Compose project appear as child devices of that project.
-Containers and projects that appear or disappear in Arcane are added and removed while
-Home Assistant keeps running.
-
-## Requirements
-
-- Home Assistant 2025.2 or newer
-- An Arcane instance reachable from Home Assistant
-- An Arcane API key
-
-## Installation
-
-### HACS
-
-1. In HACS, open the three dot menu and choose **Custom repositories**.
-2. Add `https://github.com/ProfessorQuantumUniverse/Arcane-HA` with category **Integration**.
-3. Install **Arcane** and restart Home Assistant.
-
-### Manual
-
-Copy `custom_components/arcane` into your Home Assistant `config/custom_components/`
-directory and restart Home Assistant.
-
-## Setup
-
-1. In Arcane, go to **Settings > API keys** and create a key.
-2. In Home Assistant, go to **Settings > Devices & services > Add integration** and pick
-   **Arcane**.
-3. Enter the address of your Arcane instance (for example `http://192.168.1.10:3552`)
-   and the API key.
-
-The address must be the one Arcane is actually served on. Redirects are not followed on
-purpose, so that the API key is never replayed against another host. If setup reports a
-redirect, use the address the redirect points at.
-
-### API key permissions
-
-The integration lists the permissions your setup needs itself: open the integration,
-choose **Configure > API key permissions** and copy them into the role behind the key
-under **Settings > Roles** in Arcane. The list follows the options, so a part you turn
-off drops off the list as well.
-
-Read only monitoring needs:
-
-`environments:list`, `containers:list`, `projects:list`, `images:list`, `volumes:list`,
-`networks:list`, `system:read`
-
-Add these for the switches, buttons and update installs:
-
-`containers:start`, `containers:stop`, `containers:restart`, `containers:redeploy`,
-`projects:deploy`, `projects:down`, `projects:restart`
-
-Host statistics need `system:read`, the prune button needs `system:prune`, and installing
-the Arcane update needs `system:upgrade`. The update entities also read
-`environments:read` for environments other than the local one.
-
-A key without the action permissions still works. The entities are created and the
-actions fail with an error that names the permission that is missing. Only
-`environments:list` is required for setup to succeed; every other missing permission just
-leaves that part of the data empty.
-
-Whenever Arcane refuses a call, the permission behind it is collected into a repair under
-**Settings > System > Repairs**, so a key that is too narrow says so instead of only
-showing an empty sensor. The same list is on the **API key permissions** page under
-*Refused so far*, and in the diagnostics download.
+Containers appear as child devices of their Compose project, and containers and projects
+that come and go in Arcane are added and removed while Home Assistant keeps running.
 
 ## Options
 
-Open the integration and choose **Configure**. The options are grouped into three
-sections, next to the read only **API key permissions** page described above.
+Open the integration and choose **Configure**.
 
-### Polling
+**Polling:** how often Arcane is polled (30 s by default, 10 to 3600), which
+environments to follow, and whether containers, Compose projects, resource counts and
+host statistics are polled at all. Internal and hidden containers are skipped unless you
+ask for them. Switching a part off also stops the API calls behind it, which keeps a big
+host manageable.
 
-| Option | Default | What it does |
-| --- | --- | --- |
-| Update interval | 30 s | How often Arcane is polled, between 10 and 3600 seconds |
-| Environments | all | Restrict the integration to specific environments |
-| Containers | on | Create the per container devices and the container counts |
-| Compose projects | on | Create the per project devices and the project counts |
-| Images, volumes and networks | on | Poll the usage counts and the Docker version |
-| Host CPU, memory and disk | off | See *Host statistics* below |
-| Include internal containers | off | Also expose containers Arcane marks as internal |
-| Include hidden containers | off | Also expose containers hidden in the Arcane interface |
+**Entities:** update entities, health sensors, device name prefixes, nesting containers
+under their project, and firing events.
 
-### Entities
+**Control:** whether Home Assistant may control anything at all, plus the redeploy and
+prune buttons, which are off by default.
 
-| Option | Default | What it does |
-| --- | --- | --- |
-| Image update entities | on | Offer the update entities for containers and for Arcane |
-| Health binary sensors | on | Add a Healthy sensor to containers that define a health check |
-| Prefix device names with their kind | on | Name devices `Container x` and `Project x` |
-| Nest containers under their project | on | Show a container as a child of its Compose project |
-| Fire events | on | See *Events* below |
+### Device names
 
-### Control
-
-| Option | Default | What it does |
-| --- | --- | --- |
-| Allow control from Home Assistant | on | Turn off for a read only setup: no switches, buttons or update installs |
-| Redeploy buttons | off | A button per container and project that pulls the image again and recreates |
-| Prune button | no button | A button per environment, see *Pruning* below |
-
-Turning parts off also stops the matching API calls, so a large host can be trimmed down
-to just what you use.
-
-### Naming
-
-A container and a Compose project regularly carry the same name. Home Assistant builds
-entity IDs from the device name, so without a prefix the second one only gets `_2`
-suffixed IDs. With the prefix on, the devices are named `Container kopia` and
-`Project kopia`, which gives `switch.container_kopia` and `switch.project_kopia`.
-
-Entity IDs that already exist are never rewritten. An existing installation keeps its
-current IDs and only newly discovered containers and projects use the new scheme.
+A container and a project often share a name, and Home Assistant builds entity IDs from
+the device name, so the second one would only get `_2` suffixed IDs. With the prefix on,
+you get `Container kopia` and `Project kopia`, so `switch.container_kopia` and
+`switch.project_kopia`. Existing entity IDs are never rewritten, so an upgrade keeps
+whatever it already has.
 
 ## Updates
 
-Both update entities show up under **Settings > Updates** alongside Home Assistant's own
-updates, the same place a core or add-on update appears:
+Container updates and the Arcane instance itself both show up under
+**Settings > Updates**, next to core and add-on updates. Installing a container update
+runs Arcane's redeploy. Installing the Arcane update asks Arcane to pull its own newer
+image and restart, so everything here goes unavailable for a moment.
 
-- one per container, comparing the running image against what Arcane's image update check
-  found,
-- one per environment for Arcane itself, with the release notes and a link to the
-  release page.
-
-Installing a container update runs Arcane's redeploy. Installing the Arcane update asks
-Arcane to pull its own newer image and restart, so the instance and every entity of this
-integration are briefly unavailable afterwards.
-
-An entity only appears in that panel while it actually has an update and while it can be
-installed, so with **Allow control from Home Assistant** off the entities still report
-their versions but stay out of the panel. Switching **Image update entities** off removes
-both kinds entirely.
-
-## Host statistics
-
-Arcane only offers host CPU, memory and disk usage over a WebSocket, and it sends the
-current sample right after the handshake. The integration therefore takes one sample per
-update and closes the socket again instead of holding a connection open. It is off by
-default because it is one extra connection per update.
-
-Per container CPU and memory are **not** available. Arcane streams those over one
-WebSocket per container and refuses more than five concurrent stats connections per
-client, so a host with more than a handful of containers cannot be covered that way.
+An entity only appears in that panel while it has an update and can install it, so with
+control turned off the entities still report versions but stay out of the way.
 
 ## Events
 
-With events on, these fire on the Home Assistant bus and can be used as automation
-triggers:
+With events on, these fire on the bus and work as automation triggers:
 
-| Event | Fired when | Data |
-| --- | --- | --- |
-| `arcane_container_state_changed` | A container changes state | `container`, `state`, `previous_state`, `exit_code`, `crashed`, `oom_killed`, `environment`, `environment_id` |
-| `arcane_container_health_changed` | A health check changes | `container`, `health`, `previous_health`, `environment`, `environment_id` |
-| `arcane_project_state_changed` | A project changes state | `project`, `project_id`, `status`, `previous_status`, `environment`, `environment_id` |
+| Event | Data |
+| --- | --- |
+| `arcane_container_state_changed` | `container`, `state`, `previous_state`, `exit_code`, `crashed`, `oom_killed`, `environment`, `environment_id` |
+| `arcane_container_health_changed` | `container`, `health`, `previous_health`, `environment`, `environment_id` |
+| `arcane_project_state_changed` | `project`, `project_id`, `status`, `previous_status`, `environment`, `environment_id` |
 
-`crashed` is true when a running container stopped with a non zero exit code, and
-`oom_killed` narrows that to exit code 137, the fingerprint of an out of memory kill.
-Nothing is fired for the first update after a restart or for a container that has just
-appeared.
+`crashed` means a running container stopped with a non zero exit code, and `oom_killed`
+narrows that to exit code 137, the fingerprint of an out of memory kill. Nothing fires
+for the first update after a restart or for a container that has just appeared.
 
 ```yaml
 automation:
@@ -231,50 +166,32 @@ automation:
           message: "{{ trigger.event.data.container }} crashed with exit code {{ trigger.event.data.exit_code }}"
 ```
 
-## Pruning
+## Good to know
 
-The prune button removes **unused images, unused networks and the build cache**.
-Containers and volumes are never pruned: both hold state that cannot be pulled back, and
-a single button press should not be able to destroy it.
+**Pruning** removes unused images, unused networks and the build cache. Containers and
+volumes are never touched, because both hold state you cannot pull back. The option picks
+how far it goes: no button at all, dangling images only, or every unused image. A button
+in Home Assistant has no confirmation dialog, so leave it off unless you want one press
+to act immediately.
 
-The option chooses how far it goes:
+**Host statistics** are off by default. Arcane only offers them over a WebSocket and
+sends the current sample right after the handshake, so the integration opens a socket,
+takes one sample per update and closes it again. Per container CPU and memory are not
+available: Arcane wants one socket per container and refuses more than five at a time.
 
-- *No button*: no entity is created. This is the default.
-- *Dangling images*: only untagged image layers, plus unused networks and build cache.
-- *All unused images*: also images that no container currently uses.
+**Security.** The API key travels in the `X-Api-Key` header, never in a URL, and is
+redacted from diagnostics. Only `http://` and `https://` addresses are accepted, and
+addresses carrying credentials are rejected because they end up in log lines. Redirects
+are not followed. You can switch certificate verification off for a self signed
+certificate, but Home Assistant will warn at startup, so prefer a trusted certificate or
+plain HTTP on a network you control.
 
-A button has no confirmation dialog in Home Assistant, so leave it off unless you want
-that one press to act immediately.
-
-## Notes on security
-
-- The API key is sent in the `X-Api-Key` header, never in a URL, and is redacted from
-  diagnostics downloads.
-- Only `http://` and `https://` addresses are accepted. Addresses that carry credentials
-  are rejected, because they would end up in log lines.
-- Redirects are not followed, so a redirect cannot make Home Assistant hand the API key
-  to a different host.
-- Certificate verification can be switched off for a self signed certificate. Home
-  Assistant then logs a warning at startup, because the connection carrying the API key
-  is no longer authenticated. Prefer a trusted certificate or plain HTTP on a network
-  you control.
-- Give the key only the permissions you need. The read only option above pairs well with
-  a key that holds no action permissions at all.
-
-## Notes on behaviour
-
-- Every selected environment is polled, including remote agents. An unreachable
-  environment is reported as offline instead of failing the whole update, and a
-  permission the key lacks only empties that part of the data.
-- Container entities are keyed by container name, so they survive a redeploy that gives
-  the container a new ID.
-- Stopping a Compose project runs `down`, which removes its containers. The container
-  entities for that project disappear until it is deployed again.
-- Installing a container image update runs Arcane's redeploy: it pulls the image the
-  container was created from and recreates the container with the same configuration.
-- A health sensor is added when a container reports a health check at the moment it is
-  discovered. A container that gains a health check later picks the sensor up after the
-  integration is reloaded.
+**Behaviour.** Every selected environment is polled, remote agents included; one that is
+unreachable reports as offline instead of failing the whole update. Container entities
+are keyed by name, so they survive a redeploy that changes the container ID. Stopping a
+project runs `down`, which removes its containers, so those entities disappear until it
+is deployed again. A health sensor is added when the container reports a health check at
+the moment it is discovered; one that gains a check later picks it up after a reload.
 
 ## Development
 
@@ -283,3 +200,17 @@ python -m venv .venv
 .venv/bin/pip install -r requirements_test.txt
 .venv/bin/python -m pytest
 ```
+
+### Releasing
+
+The version lives in `custom_components/arcane/manifest.json` and HACS reads it from
+there. A release is that version, tagged:
+
+1. Bump `version` in the manifest and add the matching `## X.Y.Z` section to
+   `CHANGELOG.md`.
+2. Run `python scripts/release.py check vX.Y.Z` to confirm the three agree.
+3. Merge, then push the tag. The release workflow rechecks, runs the tests and publishes
+   the GitHub release with that changelog section as its notes.
+
+HACS installs the newest published release, so a tag that was never released stays
+invisible.
