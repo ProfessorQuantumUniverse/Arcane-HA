@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Arcane",
-        "description": "Enter the address of your Arcane instance and an API key created under Settings → API keys.",
+        "description": "Enter the address of your Arcane instance and an API key created under Settings > API keys.",
         "data": {
           "url": "URL",
           "api_key": "API key",

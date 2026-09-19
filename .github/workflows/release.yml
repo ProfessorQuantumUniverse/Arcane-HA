@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check the tag against the manifest and the changelog
+        run: python scripts/release.py check "${{ github.ref_name }}"
+
+      - name: Run the tests
+        run: |
+          pip install -r requirements_test.txt
+          python -m pytest
+
+      - name: Collect the release notes
+        run: |
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            python scripts/release.py notes "${{ github.ref_name }}"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "$notes"

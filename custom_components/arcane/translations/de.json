@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Mit Arcane verbinden",
-        "description": "Gib die Adresse deiner Arcane-Instanz und einen API-Key an, den du unter Einstellungen → API-Keys erstellst.",
+        "description": "Gib die Adresse deiner Arcane-Instanz und einen API-Key an, den du unter Einstellungen > API-Keys erstellst.",
         "data": {
           "url": "URL",
           "api_key": "API-Key",
