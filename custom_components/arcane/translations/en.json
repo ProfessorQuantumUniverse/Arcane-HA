@@ -11,7 +11,7 @@
         },
         "data_description": {
           "url": "Full address of the Arcane web interface, for example http://192.168.1.10:3552",
-          "api_key": "An Arcane API key. It needs read access plus permission for the actions you want to control from Home Assistant.",
+          "api_key": "An Arcane API key. It needs read access plus permission for the actions you want to control from Home Assistant. Once set up, **Configure > API key permissions** lists exactly which permissions your options need.",
           "verify_ssl": "Turn this off if Arcane uses a self-signed certificate."
         }
       },
@@ -54,7 +54,8 @@
         "menu_options": {
           "polling": "Polling",
           "entities": "Entities",
-          "control": "Control"
+          "control": "Control",
+          "permissions": "API key permissions"
         }
       },
       "polling": {
@@ -109,6 +110,10 @@
           "redeploy_buttons": "Add a button per container and per project that pulls the image again and recreates it.",
           "prune_button": "Add a button per environment that removes unused images, networks and build cache. Containers and volumes are never pruned."
         }
+      },
+      "permissions": {
+        "title": "API key permissions",
+        "description": "These are the Arcane permissions the options you picked need. Create or edit the role behind the API key under **Settings > Roles** in Arcane and give it these, so nothing you use ends in a 403.\n\n**Monitoring**\n\n{monitoring}\n\n**Control**\n\n{control}\n\n**Refused so far**\n\n{missing}\n\nRefused so far lists what Arcane has actually turned down since the last reload. A permission that is not listed as refused may still be missing if nothing has needed it yet."
       }
     }
   },
@@ -284,14 +289,32 @@
     "container_action_failed": {
       "message": "Failed to {action} container {name}: {error}"
     },
+    "container_action_forbidden": {
+      "message": "Not allowed to {action} container {name}: the Arcane API key is missing the {permission} permission."
+    },
     "project_action_failed": {
       "message": "Failed to {action} project {name}: {error}"
+    },
+    "project_action_forbidden": {
+      "message": "Not allowed to {action} project {name}: the Arcane API key is missing the {permission} permission."
     },
     "prune_failed": {
       "message": "Failed to prune environment {name}: {error}"
     },
+    "prune_forbidden": {
+      "message": "Not allowed to prune environment {name}: the Arcane API key is missing the {permission} permission."
+    },
     "upgrade_failed": {
       "message": "Failed to upgrade Arcane on {name}: {error}"
+    },
+    "upgrade_forbidden": {
+      "message": "Not allowed to upgrade Arcane on {name}: the Arcane API key is missing the {permission} permission."
+    }
+  },
+  "issues": {
+    "missing_permissions": {
+      "title": "Arcane API key is missing permissions",
+      "description": "The API key of {name} was refused for: {permissions}\n\nUntil the role behind the key carries these, the parts that need them stay empty or fail when you use them. Add them under **Settings > Roles** in Arcane, or turn those parts off under the integration's **Configure > API key permissions**. The repair clears once the polling gets through again, or when the integration is reloaded."
     }
   }
 }

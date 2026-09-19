@@ -11,7 +11,7 @@
         },
         "data_description": {
           "url": "Vollständige Adresse der Arcane-Oberfläche, zum Beispiel http://192.168.1.10:3552",
-          "api_key": "Ein Arcane-API-Key. Er benötigt Leserechte sowie die Berechtigungen für die Aktionen, die du aus Home Assistant heraus auslösen möchtest.",
+          "api_key": "Ein Arcane-API-Key. Er braucht Leserechte und die Berechtigungen für die Aktionen, die du aus Home Assistant heraus steuern willst. Nach der Einrichtung listet **Konfigurieren > Berechtigungen des API-Keys** genau auf, welche Berechtigungen deine Optionen brauchen.",
           "verify_ssl": "Deaktivieren, wenn Arcane ein selbstsigniertes Zertifikat verwendet."
         }
       },
@@ -54,7 +54,8 @@
         "menu_options": {
           "polling": "Abfrage",
           "entities": "Entitäten",
-          "control": "Steuerung"
+          "control": "Steuerung",
+          "permissions": "Berechtigungen des API-Keys"
         }
       },
       "polling": {
@@ -109,6 +110,10 @@
           "redeploy_buttons": "Pro Container und Projekt einen Button, der das Image neu zieht und neu erstellt.",
           "prune_button": "Pro Environment ein Button, der ungenutzte Images, Netzwerke und Build Cache entfernt. Container und Volumes werden nie entfernt."
         }
+      },
+      "permissions": {
+        "title": "Berechtigungen des API-Keys",
+        "description": "Das sind die Arcane-Berechtigungen, die die gewählten Optionen brauchen. Lege die Rolle hinter dem API-Key in Arcane unter **Einstellungen > Rollen** an oder ergänze sie dort, damit nichts, was du nutzt, in einem 403 endet.\n\n**Überwachung**\n\n{monitoring}\n\n**Steuerung**\n\n{control}\n\n**Bisher abgelehnt**\n\n{missing}\n\nBisher abgelehnt listet, was Arcane seit dem letzten Neuladen tatsächlich abgelehnt hat. Eine Berechtigung, die dort nicht steht, kann trotzdem fehlen, wenn sie bisher noch nicht gebraucht wurde."
       }
     }
   },
@@ -284,14 +289,32 @@
     "container_action_failed": {
       "message": "Aktion {action} für Container {name} fehlgeschlagen: {error}"
     },
+    "container_action_forbidden": {
+      "message": "Aktion {action} für Container {name} nicht erlaubt: Dem Arcane-API-Key fehlt die Berechtigung {permission}."
+    },
     "project_action_failed": {
       "message": "Aktion {action} für Projekt {name} fehlgeschlagen: {error}"
+    },
+    "project_action_forbidden": {
+      "message": "Aktion {action} für Projekt {name} nicht erlaubt: Dem Arcane-API-Key fehlt die Berechtigung {permission}."
     },
     "prune_failed": {
       "message": "Prune für Environment {name} fehlgeschlagen: {error}"
     },
+    "prune_forbidden": {
+      "message": "Prune für Environment {name} nicht erlaubt: Dem Arcane-API-Key fehlt die Berechtigung {permission}."
+    },
     "upgrade_failed": {
       "message": "Upgrade von Arcane auf {name} fehlgeschlagen: {error}"
+    },
+    "upgrade_forbidden": {
+      "message": "Upgrade von Arcane auf {name} nicht erlaubt: Dem Arcane-API-Key fehlt die Berechtigung {permission}."
+    }
+  },
+  "issues": {
+    "missing_permissions": {
+      "title": "Dem Arcane-API-Key fehlen Berechtigungen",
+      "description": "Der API-Key von {name} wurde abgelehnt für: {permissions}\n\nSolange die Rolle hinter dem Key diese nicht hat, bleiben die Teile, die sie brauchen, leer oder scheitern beim Benutzen. Ergänze sie in Arcane unter **Einstellungen > Rollen**, oder schalte diese Teile unter **Konfigurieren > Berechtigungen des API-Keys** ab. Die Reparatur verschwindet, sobald die Abfrage wieder durchkommt oder die Integration neu geladen wird."
     }
   }
 }

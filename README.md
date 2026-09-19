@@ -94,6 +94,11 @@ redirect, use the address the redirect points at.
 
 ### API key permissions
 
+The integration lists the permissions your setup needs itself: open the integration,
+choose **Configure > API key permissions** and copy them into the role behind the key
+under **Settings > Roles** in Arcane. The list follows the options, so a part you turn
+off drops off the list as well.
+
 Read only monitoring needs:
 
 `environments:list`, `containers:list`, `projects:list`, `images:list`, `volumes:list`,
@@ -105,16 +110,23 @@ Add these for the switches, buttons and update installs:
 `projects:deploy`, `projects:down`, `projects:restart`
 
 Host statistics need `system:read`, the prune button needs `system:prune`, and installing
-the Arcane update needs `system:upgrade`.
+the Arcane update needs `system:upgrade`. The update entities also read
+`environments:read` for environments other than the local one.
 
 A key without the action permissions still works. The entities are created and the
-actions fail with a clear error. Only `environments:list` is required for setup to
-succeed; every other missing permission just leaves that part of the data empty.
+actions fail with an error that names the permission that is missing. Only
+`environments:list` is required for setup to succeed; every other missing permission just
+leaves that part of the data empty.
+
+Whenever Arcane refuses a call, the permission behind it is collected into a repair under
+**Settings > System > Repairs**, so a key that is too narrow says so instead of only
+showing an empty sensor. The same list is on the **API key permissions** page under
+*Refused so far*, and in the diagnostics download.
 
 ## Options
 
 Open the integration and choose **Configure**. The options are grouped into three
-sections.
+sections, next to the read only **API key permissions** page described above.
 
 ### Polling
 
