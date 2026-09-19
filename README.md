@@ -1,4 +1,4 @@
-<img src="brands/icon.png" alt="" width="120" align="left" hspace="18" vspace="6">
+<img src="https://github.com/ProfessorQuantumUniverse/Arcane-HA/blob/main/brands/icon.png" alt="" width="120" align="left" hspace="18" vspace="6">
 
 # Arcane for Home Assistant
 
