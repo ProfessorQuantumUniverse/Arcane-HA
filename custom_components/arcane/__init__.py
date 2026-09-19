@@ -58,6 +58,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ArcaneConfigEntry) -> bo
 
 async def async_unload_entry(hass: HomeAssistant, entry: ArcaneConfigEntry) -> bool:
     """Unload a config entry."""
+    # The repair about missing permissions belongs to this entry. It is raised
+    # again on the first refresh after a reload, and an entry on its way out
+    # should not leave one behind.
+    entry.runtime_data.async_clear_permission_issue()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

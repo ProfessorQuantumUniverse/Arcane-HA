@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org/). Nothing is tagged ye
 version is the state of the default branch from the day it landed, which is also what
 HACS installs and shows.
 
+## 0.5.0 (2026-09-19)
+
+### Added
+
+- **API key permissions** page under *Configure*. It lists the Arcane permissions the
+  options in use need, split into monitoring and control, so a role can be built before
+  anything runs into a 403. Options that are off are not listed.
+- A repair under *Settings > System > Repairs* whenever Arcane refuses a call, listing
+  every permission the API key was turned down for. It clears again once the key carries
+  them. The same list is on the permissions page and in the diagnostics download.
+- An action Arcane refuses now names the permission it needed instead of reporting a
+  bare 403.
+
 ## 0.4.0 (2026-09-17)
 
 ### Added

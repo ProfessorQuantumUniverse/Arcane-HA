@@ -64,6 +64,7 @@ from .const import (
     MIN_SCAN_INTERVAL,
     PRUNE_MODES,
 )
+from .permissions import format_permissions, required_permissions
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -321,9 +322,38 @@ class ArcaneOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Offer the three groups of options."""
+        """Offer the groups of options."""
         return self.async_show_menu(
-            step_id="init", menu_options=["polling", "entities", "control"]
+            step_id="init",
+            menu_options=["polling", "entities", "control", "permissions"],
+        )
+
+    async def async_step_permissions(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """List the API key permissions the options in use need.
+
+        Arcane refuses a call the key is not allowed to make, which otherwise
+        only shows up as an empty sensor or a failed button press. The list is
+        built from the options, so it names exactly what the enabled parts
+        need, and what Arcane has already refused is called out on top.
+        """
+        if user_input is not None:
+            return await self.async_step_init()
+
+        options = {**DEFAULT_OPTIONS, **self.config_entry.options}
+        needed = required_permissions(options)
+        coordinator = getattr(self.config_entry, "runtime_data", None)
+        missing = coordinator.missing_permissions if coordinator is not None else []
+
+        return self.async_show_form(
+            step_id="permissions",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "monitoring": format_permissions(needed.monitoring),
+                "control": format_permissions(needed.control),
+                "missing": format_permissions(missing),
+            },
         )
 
     async def async_step_polling(

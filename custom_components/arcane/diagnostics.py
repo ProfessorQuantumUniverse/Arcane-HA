@@ -21,9 +21,16 @@ async def async_get_config_entry_diagnostics(
     coordinator = entry.runtime_data
     data = coordinator.data
 
+    needed = coordinator.required_permissions
+
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "options": dict(entry.options),
+        "permissions": {
+            "monitoring": needed.monitoring,
+            "control": needed.control,
+            "missing": coordinator.missing_permissions,
+        },
         "version": data.version,
         "environments": [
             {

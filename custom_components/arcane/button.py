@@ -24,7 +24,12 @@ from .const import (
     PRUNE_UNUSED,
 )
 from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity, ArcaneProjectEntity
-from .helpers import async_setup_entities
+from .helpers import action_error, async_setup_entities
+from .permissions import (
+    CONTAINER_ACTION_PERMISSIONS,
+    PERM_SYSTEM_PRUNE,
+    PROJECT_ACTION_PERMISSIONS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,14 +123,12 @@ class ArcaneContainerButton(ArcaneContainerEntity, ButtonEntity):
                 self.environment_id, container.id, action
             )
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="container_action_failed",
-                translation_placeholders={
-                    "action": action,
-                    "name": self.container_name,
-                    "error": str(err),
-                },
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=CONTAINER_ACTION_PERMISSIONS[action],
+                action_key="container_action",
+                placeholders={"action": action, "name": self.container_name},
             ) from err
         await self.coordinator.async_request_refresh()
 
@@ -141,13 +144,14 @@ class ArcaneProjectButton(ArcaneProjectEntity, ButtonEntity):
                 self.environment_id, self.project_id, action
             )
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="project_action_failed",
-                translation_placeholders={
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=PROJECT_ACTION_PERMISSIONS[action],
+                action_key="project_action",
+                placeholders={
                     "action": action,
                     "name": self.project.name if self.project else self.project_id,
-                    "error": str(err),
                 },
             ) from err
         await self.coordinator.async_request_refresh()
@@ -168,12 +172,13 @@ class ArcanePruneButton(ArcaneEnvironmentEntity, ButtonEntity):
                 self.environment_id, unused_images=aggressive
             )
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="prune_failed",
-                translation_placeholders={
-                    "name": self.environment.name if self.environment else "",
-                    "error": str(err),
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=PERM_SYSTEM_PRUNE,
+                action_key="prune",
+                placeholders={
+                    "name": self.environment.name if self.environment else ""
                 },
             ) from err
         _LOGGER.debug(
