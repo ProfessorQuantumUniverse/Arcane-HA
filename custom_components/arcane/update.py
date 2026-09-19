@@ -17,8 +17,9 @@ from . import ArcaneConfigEntry
 from .api import ArcaneError
 from .const import CONF_ALLOW_CONTROL, CONF_UPDATE_ENTITIES, DOMAIN, MANUFACTURER
 from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity
-from .helpers import async_setup_entities
+from .helpers import action_error, async_setup_entities
 from .models import ArcaneVersion
+from .permissions import PERM_CONTAINERS_REDEPLOY, PERM_SYSTEM_UPGRADE
 
 PARALLEL_UPDATES = 1
 
@@ -115,14 +116,12 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
                 self.environment_id, container.id, "redeploy"
             )
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="container_action_failed",
-                translation_placeholders={
-                    "action": "redeploy",
-                    "name": self.container_name,
-                    "error": str(err),
-                },
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=PERM_CONTAINERS_REDEPLOY,
+                action_key="container_action",
+                placeholders={"action": "redeploy", "name": self.container_name},
             ) from err
         await self.coordinator.async_request_refresh()
 
@@ -188,12 +187,13 @@ class ArcaneInstanceUpdate(ArcaneEnvironmentEntity, UpdateEntity):
         try:
             await self.coordinator.client.async_upgrade(self.environment_id)
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="upgrade_failed",
-                translation_placeholders={
-                    "name": self.environment.name if self.environment else "",
-                    "error": str(err),
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=PERM_SYSTEM_UPGRADE,
+                action_key="upgrade",
+                placeholders={
+                    "name": self.environment.name if self.environment else ""
                 },
             ) from err
         await self.coordinator.async_request_refresh()
