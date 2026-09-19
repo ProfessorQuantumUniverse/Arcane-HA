@@ -11,9 +11,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import ArcaneAuthenticationError, ArcaneClient, ArcaneError
+from .api import (
+    ArcaneAuthenticationError,
+    ArcaneClient,
+    ArcaneError,
+    ArcanePermissionError,
+)
 from .const import (
     CONF_ENVIRONMENTS,
     CONF_EVENTS,
@@ -41,6 +47,12 @@ from .models import (
     ArcaneHostStats,
     ArcaneProject,
     ArcaneVersion,
+)
+from .permissions import (
+    POLL_PERMISSIONS,
+    RequiredPermissions,
+    format_permissions,
+    required_permissions,
 )
 
 if TYPE_CHECKING:
@@ -73,13 +85,72 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             ),
         )
         self.client = client
+        # Permissions Arcane refused, so the missing ones can be named instead
+        # of only leaving a sensor empty. The polled ones are rebuilt on every
+        # refresh; a refused button press is remembered until the entry is
+        # reloaded, because nothing polls it again.
+        self._denied_polling: set[str] = set()
+        self._denied_actions: set[str] = set()
 
     def option(self, key: str) -> Any:
         """Return an option of the config entry, or its default."""
         return self.config_entry.options.get(key, DEFAULT_OPTIONS[key])
 
+    @property
+    def required_permissions(self) -> RequiredPermissions:
+        """Return the permissions the options in use need."""
+        return required_permissions(self.config_entry.options)
+
+    @property
+    def missing_permissions(self) -> list[str]:
+        """Return the permissions Arcane has refused, in the order listed."""
+        denied = self._denied_polling | self._denied_actions
+        listed = [
+            permission
+            for permission in self.required_permissions.all
+            if permission in denied
+        ]
+        # A refused call whose permission the options do not ask for should
+        # still be reported rather than swallowed.
+        return listed + sorted(denied.difference(listed))
+
+    def async_note_denied(self, permission: str) -> None:
+        """Remember that Arcane refused an action for lack of a permission."""
+        if permission not in self._denied_actions:
+            self._denied_actions.add(permission)
+            self._async_update_permission_issue()
+
+    @property
+    def _permission_issue_id(self) -> str:
+        """Return the ID of the repair that lists the missing permissions."""
+        return f"missing_permissions_{self.config_entry.entry_id}"
+
+    def async_clear_permission_issue(self) -> None:
+        """Drop the repair, for an entry that is being unloaded."""
+        ir.async_delete_issue(self.hass, DOMAIN, self._permission_issue_id)
+
+    def _async_update_permission_issue(self) -> None:
+        """Raise or drop the repair that lists the missing permissions."""
+        issue_id = self._permission_issue_id
+        if not (missing := self.missing_permissions):
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="missing_permissions",
+            translation_placeholders={
+                "name": self.config_entry.title,
+                "permissions": format_permissions(missing),
+            },
+        )
+
     async def _async_update_data(self) -> ArcaneData:
         """Fetch a snapshot of the Arcane instance."""
+        self._denied_polling = set()
         try:
             version_info = await self.client.async_get_version()
             environments = await self.client.async_get_environments()
@@ -107,6 +178,7 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
         )
         if self.option(CONF_EVENTS):
             self._fire_events(data)
+        self._async_update_permission_issue()
         return data
 
     def _environment_calls(self, environment_id: str) -> dict[str, Any]:
@@ -136,6 +208,14 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
             # its version, so only remote ones cost a request here.
             calls["version"] = self.client.async_get_environment_version(environment_id)
         return calls
+
+    def _note_denied_polling(self, results: dict[str, Any]) -> None:
+        """Remember the permissions this refresh was refused."""
+        self._denied_polling.update(
+            POLL_PERMISSIONS[name]
+            for name, result in results.items()
+            if isinstance(result, ArcanePermissionError) and name in POLL_PERMISSIONS
+        )
 
     @staticmethod
     def _reraise_fatal(results: dict[str, Any]) -> None:
@@ -176,6 +256,7 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
                 )
             )
             self._reraise_fatal(results)
+            self._note_denied_polling(results)
             # Arcane answered at least once, so the environment itself is up
             # even if some of the calls were refused.
             environment.reachable = any(

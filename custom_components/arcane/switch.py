@@ -17,7 +17,8 @@ from . import ArcaneConfigEntry
 from .api import ArcaneError
 from .const import CONF_ALLOW_CONTROL, DOMAIN
 from .entity import ArcaneContainerEntity, ArcaneProjectEntity
-from .helpers import async_setup_entities
+from .helpers import action_error, async_setup_entities
+from .permissions import CONTAINER_ACTION_PERMISSIONS, PROJECT_ACTION_PERMISSIONS
 
 PARALLEL_UPDATES = 1
 
@@ -89,14 +90,12 @@ class ArcaneContainerSwitch(ArcaneContainerEntity, SwitchEntity):
                 self.environment_id, container.id, action
             )
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="container_action_failed",
-                translation_placeholders={
-                    "action": action,
-                    "name": self.container_name,
-                    "error": str(err),
-                },
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=CONTAINER_ACTION_PERMISSIONS[action],
+                action_key="container_action",
+                placeholders={"action": action, "name": self.container_name},
             ) from err
         await self.coordinator.async_request_refresh()
 
@@ -128,13 +127,14 @@ class ArcaneProjectSwitch(ArcaneProjectEntity, SwitchEntity):
                 self.environment_id, self.project_id, action
             )
         except ArcaneError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="project_action_failed",
-                translation_placeholders={
+            raise action_error(
+                self.coordinator,
+                err,
+                permission=PROJECT_ACTION_PERMISSIONS[action],
+                action_key="project_action",
+                placeholders={
                     "action": action,
                     "name": self.project.name if self.project else self.project_id,
-                    "error": str(err),
                 },
             ) from err
         await self.coordinator.async_request_refresh()

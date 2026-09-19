@@ -5,8 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from .api import ArcaneError, ArcanePermissionError
+from .const import DOMAIN
 
 if TYPE_CHECKING:
     from .coordinator import ArcaneCoordinator
@@ -59,4 +63,33 @@ def async_setup_entities(
     _async_add_new()
     coordinator.config_entry.async_on_unload(
         coordinator.async_add_listener(_async_add_new)
+    )
+
+
+def action_error(
+    coordinator: ArcaneCoordinator,
+    err: ArcaneError,
+    *,
+    permission: str,
+    action_key: str,
+    placeholders: dict[str, str],
+) -> HomeAssistantError:
+    """Return the error to raise for an action that did not go through.
+
+    An action Arcane refused is reported with the permission the API key is
+    missing, rather than with a bare 403, and is remembered so the repair issue
+    lists it next to the permissions the polling is missing. Every action has a
+    ``<action_key>_failed`` and a ``<action_key>_forbidden`` message.
+    """
+    if isinstance(err, ArcanePermissionError):
+        coordinator.async_note_denied(permission)
+        return HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key=f"{action_key}_forbidden",
+            translation_placeholders={**placeholders, "permission": permission},
+        )
+    return HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key=f"{action_key}_failed",
+        translation_placeholders={**placeholders, "error": str(err)},
     )
