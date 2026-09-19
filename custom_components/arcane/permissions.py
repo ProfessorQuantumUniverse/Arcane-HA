@@ -179,4 +179,4 @@ def _unique(permissions: Iterable[str]) -> list[str]:
 def format_permissions(permissions: Iterable[str]) -> str:
     """Return permissions as one line of markdown, ready for a form."""
     listed = ", ".join(f"`{permission}`" for permission in permissions)
-    return listed or "—"
+    return listed or "-"
