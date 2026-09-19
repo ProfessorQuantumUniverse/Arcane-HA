@@ -5,6 +5,20 @@ and a published GitHub release, and that release is what HACS installs. The vers
 `custom_components/arcane/manifest.json` is the one being released; the release workflow
 refuses a tag that disagrees with it or with this file.
 
+## 0.5.1 (2026-09-19)
+
+### Fixed
+
+- The icon at the top of the README is linked absolutely, so it also shows up where the
+  README is rendered outside GitHub, HACS included.
+- Publishing a release that someone had already written by hand failed the whole release
+  run. An existing release is now left alone, notes and all.
+
+### Changed
+
+- The workflows check out and set up Python with the action versions that run on
+  Node 24, which clears the deprecation warning on every run.
+
 ## 0.5.0 (2026-09-19)
 
 First tagged release.
