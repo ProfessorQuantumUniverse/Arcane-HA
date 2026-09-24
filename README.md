@@ -12,6 +12,13 @@ through [Arcane](https://github.com/getarcaneapp/arcane).
 [![Validate](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml)
 [![Tests](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml)
 
+<!-- INSTALL BUTTONS START -->
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=ProfessorQuantumUniverse&repository=Arcane-HA&category=integration"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open your Home Assistant instance and open this repository in HACS" height="48"></a>
+  <a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=arcane"><img src="https://my.home-assistant.io/badges/config_flow_start.svg" alt="Open your Home Assistant instance and start setting up Arcane" height="48"></a>
+</p>
+<!-- INSTALL BUTTONS END -->
+
 You get a device per Arcane environment, per container and per Compose project, with
 switches to start and stop them, buttons to restart and redeploy, sensors for the state
 and the counts, and update entities that appear under **Settings > Updates** when a
@@ -23,7 +30,7 @@ Home Assistant 2025.2 or newer, an Arcane instance it can reach, and an Arcane A
 
 ## Install
 
-**HACS:** open the three dot menu, choose **Custom repositories**, add
+**HACS:** click the **Open in HACS** button above, or open the three dot menu, choose **Custom repositories**, add
 `https://github.com/ProfessorQuantumUniverse/Arcane-HA` with category **Integration**,
 install **Arcane** and restart.
 
