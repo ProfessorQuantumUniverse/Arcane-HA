@@ -22,6 +22,10 @@ from .const import (
 _HEALTH_PATTERN = re.compile(r"\((healthy|unhealthy|health: starting)\)")
 _EXIT_CODE_PATTERN = re.compile(r"^Exited \((\d+)\)")
 
+# Stands in for the newest version of an image Arcane found an update for
+# without naming a version or a digest.
+NEWER_IMAGE = "newer image"
+
 
 def _container_name(payload: dict[str, Any]) -> str:
     """Return the primary container name without the Docker slash prefix."""
@@ -36,7 +40,8 @@ def _short_digest(value: Any) -> str | None:
     """Return a readable short form of an image digest."""
     if not isinstance(value, str) or not value.strip():
         return None
-    return value.strip().removeprefix("sha256:")[:12] or None
+    digest = value.strip().rpartition("@")[2]
+    return digest.removeprefix("sha256:")[:12] or None
 
 
 def _health(status: str) -> str | None:
@@ -63,12 +68,55 @@ def _version(value: Any) -> str | None:
     return None
 
 
-def _image_tag(image: str) -> str | None:
-    """Return the tag of an image reference, ignoring a port in the registry."""
-    _, separator, tag = image.rpartition(":")
+def _split_image(image: str) -> tuple[str, str | None]:
+    """Split an image reference into its name and tag.
+
+    A pinned digest is dropped, and a colon in front of a slash belongs to a
+    registry port rather than to a tag.
+    """
+    reference = image.partition("@")[0]
+    name, separator, tag = reference.rpartition(":")
     if not separator or "/" in tag:
-        return None
-    return tag or None
+        return reference, None
+    return name, tag or None
+
+
+def image_name(image: str) -> str | None:
+    """Return an image reference without its tag and digest."""
+    return _split_image(image)[0] or None
+
+
+def _image_tag(image: str) -> str | None:
+    """Return the tag of an image reference."""
+    return _split_image(image)[1]
+
+
+def _image_versions(
+    update_info: dict[str, Any], image: str
+) -> tuple[str | None, str | None]:
+    """Return the installed and the newest version of a container image.
+
+    Arcane decides whether there is an update, and the update entity has to
+    agree with it. A moving tag such as ``latest`` is updated by publishing a
+    new digest under the same tag, so Arcane reports the tag as both versions.
+    Home Assistant only lists an update whose two versions differ, so the
+    digests stand in for the versions then.
+    """
+    installed = _version(update_info.get("currentVersion")) or _image_tag(image)
+    latest = _version(update_info.get("latestVersion"))
+    if not update_info.get("hasUpdate"):
+        # A newer version Arcane does not offer, for example because the update
+        # policy of the container ignores it, is no update either.
+        return installed, installed
+    if latest is not None and latest != installed:
+        return installed, latest
+
+    current_digest = _short_digest(update_info.get("currentDigest"))
+    latest_digest = _short_digest(update_info.get("latestDigest"))
+    if latest_digest is not None and latest_digest != current_digest:
+        return current_digest or installed, latest_digest
+    # Arcane named neither a version nor a digest, but still found an update.
+    return installed, f"{installed} ({NEWER_IMAGE})" if installed else NEWER_IMAGE
 
 
 def _created_at(value: Any) -> datetime | None:
@@ -115,8 +163,7 @@ class ArcaneContainer:
         update_info = payload.get("updateInfo") or {}
         image = str(payload.get("image") or "")
         status = str(payload.get("status") or "")
-        installed = _version(update_info.get("currentVersion")) or _image_tag(image)
-        latest = _version(update_info.get("latestVersion"))
+        installed, latest = _image_versions(update_info, image)
         return cls(
             id=str(payload.get("id", "")),
             name=_container_name(payload),
@@ -126,7 +173,7 @@ class ArcaneContainer:
             created=_created_at(payload.get("created")),
             update_available=bool(update_info.get("hasUpdate")),
             installed_version=installed,
-            latest_version=latest or installed,
+            latest_version=latest,
             health=_health(status),
             exit_code=_exit_code(status),
             project=labels.get("com.docker.compose.project"),
@@ -181,12 +228,17 @@ class ArcaneVersion:
         installed = _version(payload.get("currentVersion"))
         latest = _version(payload.get("newestVersion"))
         update_available = bool(payload.get("updateAvailable"))
-        if latest is None and update_available:
+        if not update_available:
+            # Arcane decides whether it offers an update, so a newer release
+            # it does not offer is not shown as one either.
+            latest = installed
+        elif latest is None or latest == installed:
             # An instance that tracks a digest rather than a release reports an
-            # update without naming a version. The digest is what changed, so
-            # it stands in as the newer version; Home Assistant needs the two
-            # to differ for the entity to read as "update available".
-            latest = _short_digest(payload.get("newestDigest"))
+            # update without naming a newer version, or names the one it runs
+            # when a new build of it is out. The digest is what changed, so it
+            # stands in as the newer version; Home Assistant needs the two to
+            # differ for the entity to read as "update available".
+            latest = _short_digest(payload.get("newestDigest")) or latest
         return cls(
             installed=installed,
             # Home Assistant compares the two, so an unknown newest version has

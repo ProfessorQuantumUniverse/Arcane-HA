@@ -18,7 +18,7 @@ from .api import ArcaneError
 from .const import CONF_ALLOW_CONTROL, CONF_UPDATE_ENTITIES, DOMAIN, MANUFACTURER
 from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity
 from .helpers import action_error, async_setup_entities
-from .models import ArcaneVersion
+from .models import ArcaneVersion, image_name
 from .permissions import PERM_CONTAINERS_REDEPLOY, PERM_SYSTEM_UPGRADE
 
 PARALLEL_UPDATES = 1
@@ -89,7 +89,7 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
         """Return the image this update is about."""
         if (container := self.container) is None:
             return None
-        return container.image.rsplit(":", 1)[0] if container.image else None
+        return image_name(container.image)
 
     @property
     def installed_version(self) -> str | None:
@@ -100,6 +100,14 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     def latest_version(self) -> str | None:
         """Return the newest version Arcane found for the image."""
         return self.container.latest_version if self.container else None
+
+    def version_is_newer(self, latest_version: str, installed_version: str) -> bool:
+        """Return whether Arcane found an update for the image.
+
+        The versions are often digests, which cannot be ordered, so Arcane's
+        own verdict decides instead of a comparison of the two.
+        """
+        return self.container is not None and self.container.update_available
 
     async def async_install(
         self, version: str | None, backup: bool, **kwargs: Any
@@ -165,6 +173,14 @@ class ArcaneInstanceUpdate(ArcaneEnvironmentEntity, UpdateEntity):
     def latest_version(self) -> str | None:
         """Return the newest Arcane version available."""
         return self._version.latest if self._version else None
+
+    def version_is_newer(self, latest_version: str, installed_version: str) -> bool:
+        """Return whether Arcane offers an update of itself.
+
+        A digest standing in for the newest version cannot be ordered against
+        a release number, so Arcane's own verdict decides.
+        """
+        return self._version is not None and self._version.update_available
 
     @property
     def release_url(self) -> str | None:

@@ -50,9 +50,7 @@ def check(tag: str) -> int:
     if not SEMVER.match(version):
         problems.append(f"tag {tag} is not vMAJOR.MINOR.PATCH")
     if version != manifest_version():
-        problems.append(
-            f"tag says {version}, manifest.json says {manifest_version()}"
-        )
+        problems.append(f"tag says {version}, manifest.json says {manifest_version()}")
 
     sections = changelog_sections()
     if not sections:

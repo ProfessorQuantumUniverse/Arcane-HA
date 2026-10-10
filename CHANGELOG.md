@@ -5,6 +5,26 @@ and a published GitHub release, and that release is what HACS installs. The vers
 `custom_components/arcane/manifest.json` is the one being released; the release workflow
 refuses a tag that disagrees with it or with this file.
 
+## 0.5.2 (2026-10-10)
+
+### Fixed
+
+- Container updates now show up under *Settings > Updates*
+  ([#8](https://github.com/ProfessorQuantumUniverse/Arcane-HA/issues/8)). An image on a
+  moving tag such as `latest` is updated by a new digest under the same tag, so Arcane
+  reported the tag as both the installed and the newest version, and Home Assistant read
+  that as "up to date" even though the *Update available* sensor was on. Such an update
+  is now shown with the short digests as its versions.
+- Whether an update entity is on now follows Arcane's own verdict, the same one the
+  *Update available* sensors show, instead of Home Assistant comparing the two versions.
+  Digests cannot be put in order, and one made of digits only could read as older than
+  the image already running.
+- A new build of the Arcane version already running, as the `next` channel ships them,
+  is listed as an update instead of being hidden behind two equal version numbers.
+- The update title of an image on a registry with a port, such as
+  `registry.local:5000/app`, is no longer cut off at the port, and an image pinned to a
+  digest no longer shows part of that digest as its tag.
+
 ## 0.5.1 (2026-09-19)
 
 ### Fixed

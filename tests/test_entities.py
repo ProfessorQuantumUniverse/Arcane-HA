@@ -534,6 +534,24 @@ async def test_arcane_update_falls_back_to_the_digest(
     )
 
 
+async def test_arcane_update_of_a_new_build_of_the_same_version(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A new build of the running version still reads as an update."""
+    mock_client.async_get_version.return_value = {
+        "currentVersion": "1.5.0",
+        "newestVersion": "1.5.0",
+        "updateAvailable": True,
+        "newestDigest": "sha256:9f8e7d6c5b4a3210fedcba9876543210",
+    }
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get("update.local_arcane")
+    assert state.state == STATE_ON
+    assert state.attributes["installed_version"] == "1.5.0"
+    assert state.attributes["latest_version"] == "9f8e7d6c5b4a"
+
+
 async def test_arcane_update_without_an_update(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -556,6 +574,36 @@ async def test_container_update_carries_the_image_as_title(
 
     state = hass.states.get("update.container_homeassistant_image_update")
     assert state.attributes["title"] == "ghcr.io/home-assistant/home-assistant"
+
+
+async def test_container_update_of_a_moving_tag_is_listed(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A new image under the same tag shows up in the updates panel."""
+    mock_client.async_get_containers.return_value = [
+        {
+            **CONTAINERS_PAYLOAD[0],
+            "image": "ghcr.io/homarr-labs/homarr:latest",
+            "updateInfo": {
+                "hasUpdate": True,
+                "updateType": "digest",
+                "currentVersion": "latest",
+                "latestVersion": "latest",
+                # Digests made of digits only would compare as numbers, and
+                # this one would read as older than the installed image.
+                "currentDigest": "sha256:900000000000",
+                "latestDigest": "sha256:100000000000",
+            },
+        }
+    ]
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get("update.container_homeassistant_image_update")
+    assert state.state == STATE_ON
+    assert state.attributes["installed_version"] == "900000000000"
+    assert state.attributes["latest_version"] == "100000000000"
+    assert state.attributes["title"] == "ghcr.io/homarr-labs/homarr"
+    assert state.attributes["supported_features"] & UpdateEntityFeature.INSTALL
 
 
 async def test_only_remote_environments_cost_a_version_request(
