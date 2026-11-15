@@ -7,7 +7,7 @@ through [Arcane](https://github.com/getarcaneapp/arcane).
 
 <br clear="left">
 
-[![HACS](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz)
+[![HACS](https://img.shields.io/badge/HACS-default-41BDF5.svg)](https://hacs.xyz)
 [![Release](https://img.shields.io/github/v/release/ProfessorQuantumUniverse/Arcane-HA?display_name=tag&sort=semver)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/releases)
 [![Validate](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml)
 [![Tests](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml)
