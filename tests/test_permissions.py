@@ -55,6 +55,7 @@ def test_defaults_need_read_and_control() -> None:
         "networks:list",
         "system:read",
         "environments:read",
+        "image-updates:read",
     ]
     assert needed.control == [
         "containers:start",
@@ -231,4 +232,12 @@ async def test_refused_action_names_the_permission(
             DOMAIN, f"missing_permissions_{mock_config_entry.entry_id}"
         )
         is not None
+    )
+
+
+def test_release_notes_permission_only_on_arcane_3() -> None:
+    """Arcane 2 has no release notes, so it is not asked for there."""
+    assert "image-updates:read" in required_permissions({}, ApiGeneration.V3).monitoring
+    assert "image-updates:read" not in (
+        required_permissions({}, ApiGeneration.V2).monitoring
     )

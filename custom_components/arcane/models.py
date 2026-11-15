@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from .const import (
     ENVIRONMENT_STATUS_ONLINE,
@@ -25,6 +26,52 @@ _EXIT_CODE_PATTERN = re.compile(r"^Exited \((\d+)\)")
 # Stands in for the newest version of an image Arcane found an update for
 # without naming a version or a digest.
 NEWER_IMAGE = "newer image"
+
+# OCI image labels that may name where an image is built from. Docker copies
+# image labels onto the container, so they show up in the container list.
+_SOURCE_LABELS = (
+    "org.opencontainers.image.source",
+    "org.opencontainers.image.url",
+    "org.opencontainers.image.documentation",
+)
+_GITHUB_HOSTS = ("github.com", "www.github.com")
+_GITHUB_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+_GITHUB_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+
+
+def github_releases_url(source: str | None) -> str | None:
+    """Return the GitHub releases page of a repository URL, if it is one.
+
+    The labels are set by whoever built the image, so only a plain GitHub
+    repository address is turned into a link, never an arbitrary URL.
+    """
+    if not source:
+        return None
+    raw = source.strip().removeprefix("git+")
+    if raw.startswith("git://"):
+        raw = "https://" + raw.removeprefix("git://")
+    parts = urlsplit(raw)
+    if parts.scheme not in ("http", "https") or (
+        (parts.hostname or "").lower() not in _GITHUB_HOSTS
+    ):
+        return None
+    match [segment for segment in parts.path.split("/") if segment]:
+        case [owner, repo, *_]:
+            repo = repo.removesuffix(".git")
+        case _:
+            return None
+    if not _GITHUB_OWNER.match(owner) or not _GITHUB_REPO.match(repo):
+        return None
+    return f"https://github.com/{owner}/{repo}/releases"
+
+
+def _release_link(labels: dict[str, Any]) -> str | None:
+    """Return the first GitHub releases page the image labels point at."""
+    for label in _SOURCE_LABELS:
+        value = labels.get(label)
+        if isinstance(value, str) and (link := github_releases_url(value)):
+            return link
+    return None
 
 
 def _container_name(payload: dict[str, Any]) -> str:
@@ -143,6 +190,11 @@ class ArcaneContainer:
     exit_code: int | None
     project: str | None
     service: str | None
+    # What Arcane reports as the target of an update, untouched, as the release
+    # notes are looked up for exactly that version or digest.
+    update_version: str | None = None
+    update_digest: str | None = None
+    release_link: str | None = None
 
     @property
     def is_running(self) -> bool:
@@ -178,6 +230,15 @@ class ArcaneContainer:
             exit_code=_exit_code(status),
             project=labels.get("com.docker.compose.project"),
             service=labels.get("com.docker.compose.service"),
+            # A version names the release only for a tag update; for a digest
+            # update the newest version is the tag the container already runs.
+            update_version=(
+                _version(update_info.get("latestVersion"))
+                if update_info.get("updateType") == "tag"
+                else None
+            ),
+            update_digest=_version(update_info.get("latestDigest")),
+            release_link=_release_link(labels),
         )
 
 

@@ -153,6 +153,12 @@ async def arcane_server(aiohttp_client, socket_enabled):
             {"success": True, "data": seen.get("update_result", {"failed": 0})}
         )
 
+    async def release_notes(request: web.Request) -> web.Response:
+        seen["calls"].append(("GET", request.path, dict(request.query)))
+        return web.json_response(
+            {"success": True, "data": {"status": "found", "notes": "## Fixes"}}
+        )
+
     async def catch_all(request: web.Request) -> web.Response:
         seen["path"] = request.raw_path
         seen["calls"].append((request.method, request.path, dict(request.query)))
@@ -176,6 +182,7 @@ async def arcane_server(aiohttp_client, socket_enabled):
         app.router.add_post(f"{base}/0/containers/abc/update", update_container)
         app.router.add_get(f"{base}/0/ws/system/stats", host_stats)
         app.router.add_get(f"{base}/6/ws/system/stats", host_stats_redirect)
+    app.router.add_get("/api/agents/0/images/updates/releasenotes", release_notes)
     app.router.add_get("/elsewhere/stats", host_stats)
     app.router.add_route("*", "/{tail:.*}", catch_all)
 
@@ -568,3 +575,43 @@ async def test_skipped_update_is_not_an_error(arcane_server) -> None:
     client = _client(http, ApiGeneration.V3)
 
     assert (await client.async_update_container("0", "abc"))["skipped"] == 1
+
+
+async def test_release_notes_on_arcane_3(arcane_server) -> None:
+    """Arcane 3 looks up the release of the target version for an image."""
+    http, seen = arcane_server
+    client = _client(http, ApiGeneration.V3)
+
+    notes = await client.async_get_release_notes(
+        "0", "traefik/whoami:v1.11.0", version="v1.12.0", digest="sha256:new"
+    )
+
+    assert notes == {"status": "found", "notes": "## Fixes"}
+    assert seen["calls"][-1] == (
+        "GET",
+        "/api/agents/0/images/updates/releasenotes",
+        {
+            "imageRef": "traefik/whoami:v1.11.0",
+            "version": "v1.12.0",
+            "digest": "sha256:new",
+        },
+    )
+
+
+async def test_release_notes_skip_what_is_unknown(arcane_server) -> None:
+    """A digest update has no version to ask for."""
+    http, seen = arcane_server
+    client = _client(http, ApiGeneration.V3)
+
+    await client.async_get_release_notes("0", "app:latest", digest="sha256:new")
+
+    assert seen["calls"][-1][2] == {"imageRef": "app:latest", "digest": "sha256:new"}
+
+
+async def test_arcane_2_has_no_release_notes(arcane_server) -> None:
+    """Arcane 2 has no release notes endpoint, so nothing is requested."""
+    http, seen = arcane_server
+    client = _client(http, ApiGeneration.V2)
+
+    assert await client.async_get_release_notes("0", "app:1", version="2") == {}
+    assert seen["calls"] == []

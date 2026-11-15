@@ -586,6 +586,37 @@ class ArcaneClient:
             raise ArcaneResponseError(failure)
         return data
 
+    async def async_get_release_notes(
+        self,
+        environment_id: str,
+        image: str,
+        *,
+        version: str | None = None,
+        digest: str | None = None,
+    ) -> dict[str, Any]:
+        """Return the release notes Arcane found for an image update.
+
+        Arcane 3 reads the source repository from the image labels, looks up
+        the GitHub release of the target version and caches it. Arcane 2 has
+        no such endpoint, so nothing is asked for there.
+        """
+        if self._generation is None:
+            await self.async_get_version()
+        if self._generation is not ApiGeneration.V3:
+            return {}
+        params = {"imageRef": image}
+        if version:
+            params["version"] = version
+        if digest:
+            params["digest"] = digest
+        data = await self._get_data(
+            await self._environment_url(
+                environment_id, "images", "updates", "releasenotes"
+            ),
+            params,
+        )
+        return data if isinstance(data, dict) else {}
+
     async def async_project_action(
         self, environment_id: str, project_id: str, action: str
     ) -> None:

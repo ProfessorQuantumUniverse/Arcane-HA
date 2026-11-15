@@ -19,6 +19,12 @@ refuses a tag that disagrees with it or with this file.
   Home Assistant does not break the integration on the way.
 - Setup tells you when no Arcane API answers at the address, instead of reporting an
   unexpected error.
+- Release notes for container updates. On Arcane 3 the update dialog shows the GitHub
+  release notes of the version the update installs, which Arcane finds from the image
+  labels. They are only fetched when the dialog asks for them and are kept per target
+  version. Every container update also links to its release, or to the releases page of
+  the repository the image names in its `org.opencontainers.image.source` label, which
+  works on Arcane 2 as well.
 
 ### Changed
 
@@ -33,7 +39,8 @@ refuses a tag that disagrees with it or with this file.
 - **API key permissions:** installing a container update needs `image-updates:apply` on
   Arcane 3 (`image-updates:check` on Arcane 2) instead of `containers:redeploy`. Only the
   redeploy buttons still need `containers:redeploy`. A key without the new permission
-  gets a repair naming it the first time an install is refused.
+  gets a repair naming it the first time an install is refused. The release notes need
+  `image-updates:read` on Arcane 3; without it the dialog just shows none.
 
 ## 0.5.2 (2026-10-10)
 

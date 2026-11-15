@@ -51,6 +51,7 @@ PERM_NETWORKS_LIST: Final = "networks:list"
 PERM_SYSTEM_READ: Final = "system:read"
 PERM_SYSTEM_PRUNE: Final = "system:prune"
 PERM_SYSTEM_UPGRADE: Final = "system:upgrade"
+PERM_IMAGE_UPDATES_READ: Final = "image-updates:read"
 PERM_IMAGE_UPDATES_CHECK: Final = "image-updates:check"
 PERM_IMAGE_UPDATES_APPLY: Final = "image-updates:apply"
 
@@ -127,12 +128,14 @@ def required_permissions(
     instance is taken into account when it is known.
     """
     return RequiredPermissions(
-        monitoring=_unique(_monitoring_permissions(options)),
+        monitoring=_unique(_monitoring_permissions(options, generation)),
         control=_unique(_control_permissions(options, generation)),
     )
 
 
-def _monitoring_permissions(options: Mapping[str, Any]) -> list[str]:
+def _monitoring_permissions(
+    options: Mapping[str, Any], generation: ApiGeneration | None
+) -> list[str]:
     """Return the permissions the polling of one refresh needs."""
     # The environment list is the one call every setup makes. Arcane lets any
     # key call it and answers with the environments the key holds a permission
@@ -154,6 +157,10 @@ def _monitoring_permissions(options: Mapping[str, Any]) -> list[str]:
         # version, and which ones exist is not known here, so the permission is
         # listed whenever the update entities are on.
         permissions.append(PERM_ENVIRONMENTS_READ)
+        if generation is not ApiGeneration.V2:
+            # The release notes of a container update. Only Arcane 3 has them,
+            # and a key without the permission just goes without notes.
+            permissions.append(PERM_IMAGE_UPDATES_READ)
     return permissions
 
 

@@ -44,11 +44,14 @@ CONTAINERS_PAYLOAD = [
         "labels": {
             "com.docker.compose.project": "smarthome",
             "com.docker.compose.service": "homeassistant",
+            "org.opencontainers.image.source": "https://github.com/home-assistant/core",
         },
         "updateInfo": {
             "hasUpdate": True,
+            "updateType": "tag",
             "currentVersion": "2025.1.0",
             "latestVersion": "2025.2.0",
+            "latestDigest": "sha256:feed",
         },
     },
     {
@@ -149,4 +152,9 @@ def mock_client() -> Generator[AsyncMock]:
         client.async_get_environment_version.return_value = REMOTE_VERSION_PAYLOAD
         client.async_prune.return_value = {"spaceReclaimed": 1024}
         client.async_update_container.return_value = {"updated": 1, "failed": 0}
+        client.async_get_release_notes.return_value = {
+            "status": "found",
+            "notes": "## What's new\n\nFaster frontend.",
+            "releaseUrl": "https://github.com/home-assistant/core/releases/tag/2025.2.0",
+        }
         yield client

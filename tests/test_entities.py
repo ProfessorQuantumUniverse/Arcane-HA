@@ -329,7 +329,8 @@ async def test_read_only_mode(
     )
 
     update = hass.states.get("update.container_homeassistant_image_update")
-    assert update.attributes["supported_features"] == 0
+    # Release notes only read, so they stay; installing is what goes away.
+    assert update.attributes["supported_features"] == UpdateEntityFeature.RELEASE_NOTES
 
 
 async def test_disabled_resource_polling(
@@ -701,3 +702,115 @@ async def test_read_only_mode_keeps_updates_visible_but_not_installable(
     state = hass.states.get("update.local_arcane")
     assert state.state == STATE_ON
     assert not state.attributes["supported_features"] & UpdateEntityFeature.INSTALL
+
+
+CONTAINER_UPDATE = "update.container_homeassistant_image_update"
+
+
+async def _release_notes(hass: HomeAssistant, hass_ws_client) -> dict:
+    """Ask for the release notes the way the update dialog does."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "update/release_notes", "entity_id": CONTAINER_UPDATE}
+    )
+    return await client.receive_json()
+
+
+async def test_container_update_release_notes(
+    hass: HomeAssistant,
+    hass_ws_client,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Arcane 3 release notes show in the update dialog, fetched once."""
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert state.attributes["supported_features"] & UpdateEntityFeature.RELEASE_NOTES
+    # Before the dialog asks, the link comes from the image labels.
+    assert (
+        state.attributes["release_url"]
+        == "https://github.com/home-assistant/core/releases"
+    )
+
+    for _ in range(2):
+        reply = await _release_notes(hass, hass_ws_client)
+        assert reply["success"]
+        assert reply["result"] == "## What's new\n\nFaster frontend."
+
+    mock_client.async_get_release_notes.assert_awaited_once_with(
+        "0",
+        "ghcr.io/home-assistant/home-assistant:stable",
+        version="2025.2.0",
+        digest="sha256:feed",
+    )
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert (
+        state.attributes["release_url"]
+        == "https://github.com/home-assistant/core/releases/tag/2025.2.0"
+    )
+
+
+async def test_container_update_without_release_notes(
+    hass: HomeAssistant,
+    hass_ws_client,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """When Arcane finds no notes, the dialog stops offering them."""
+    mock_client.async_get_release_notes.return_value = {
+        "status": "link",
+        "releaseUrl": "https://github.com/home-assistant/core/releases",
+    }
+    await _setup(hass, mock_config_entry)
+
+    reply = await _release_notes(hass, hass_ws_client)
+    assert reply["result"] is None
+
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert not state.attributes["supported_features"] & (
+        UpdateEntityFeature.RELEASE_NOTES
+    )
+    assert (
+        state.attributes["release_url"]
+        == "https://github.com/home-assistant/core/releases"
+    )
+
+
+async def test_release_notes_need_their_permission(
+    hass: HomeAssistant,
+    hass_ws_client,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A key that may not read release notes just goes without them."""
+    mock_client.async_get_release_notes.side_effect = ArcanePermissionError("nope")
+    await _setup(hass, mock_config_entry)
+
+    reply = await _release_notes(hass, hass_ws_client)
+    assert reply["result"] is None
+
+    coordinator = mock_config_entry.runtime_data
+    assert "image-updates:read" in coordinator.missing_permissions
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert not state.attributes["supported_features"] & (
+        UpdateEntityFeature.RELEASE_NOTES
+    )
+
+
+async def test_arcane_2_links_releases_without_notes(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Arcane 2 has no release notes, but the image labels still give a link."""
+    mock_client.generation = ApiGeneration.V2
+    await _setup(hass, mock_config_entry)
+
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert not state.attributes["supported_features"] & (
+        UpdateEntityFeature.RELEASE_NOTES
+    )
+    assert (
+        state.attributes["release_url"]
+        == "https://github.com/home-assistant/core/releases"
+    )
+    mock_client.async_get_release_notes.assert_not_awaited()

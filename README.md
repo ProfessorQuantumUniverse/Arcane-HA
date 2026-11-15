@@ -62,7 +62,8 @@ Monitoring needs `environments:list`, `containers:list`, `projects:list`, `image
 `volumes:list`, `networks:list` and `system:read`. Controlling things adds
 `containers:start`, `containers:stop`, `containers:restart`, `projects:deploy`,
 `projects:down` and `projects:restart`. Installing container updates needs
-`image-updates:apply` on Arcane 3 and `image-updates:check` on Arcane 2. The redeploy
+`image-updates:apply` on Arcane 3 and `image-updates:check` on Arcane 2, and their
+release notes `image-updates:read` on Arcane 3. The redeploy
 buttons need `containers:redeploy`, pruning needs `system:prune` and upgrading Arcane
 itself needs `system:upgrade`.
 
@@ -165,6 +166,15 @@ services:
 
 Arcane then reports `1.3.0` as the update, and installing it writes the new tag into the
 compose file and recreates the container on it.
+
+**Release notes.** On Arcane 3 the update dialog of a container shows the release notes
+of the version it installs. Arcane looks them up on GitHub from the
+`org.opencontainers.image.source` label of the image, so they appear for images that
+carry that label and publish GitHub releases. Set a GitHub token in Arcane if you have
+many such images, or GitHub's limit for anonymous requests runs out. A digest update of
+a moving tag usually has no release to match, and official Docker Hub images such as
+`nginx` name no source, so those show none. Either way, every container update links to
+its release or to the releases page of the image's repository, on Arcane 2 as well.
 
 An entity only appears in that panel while it has an update and can install it, so with
 control turned off the entities still report versions but stay out of the way.

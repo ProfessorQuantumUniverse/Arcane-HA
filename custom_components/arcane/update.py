@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.update import (
     UpdateEntity,
@@ -14,12 +15,21 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ArcaneConfigEntry
-from .api import ArcaneError
+from .api import ApiGeneration, ArcaneError, ArcanePermissionError
 from .const import CONF_ALLOW_CONTROL, CONF_UPDATE_ENTITIES, DOMAIN, MANUFACTURER
 from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity
 from .helpers import action_error, async_setup_entities
 from .models import ArcaneVersion, image_name
-from .permissions import PERM_SYSTEM_UPGRADE, container_update_permission
+from .permissions import (
+    PERM_IMAGE_UPDATES_READ,
+    PERM_SYSTEM_UPGRADE,
+    container_update_permission,
+)
+
+if TYPE_CHECKING:
+    from .coordinator import ArcaneCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
 
@@ -78,14 +88,96 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     digest of a moving tag such as ``latest``, or, for a container whose
     update policy follows versions, the newer tag it writes into the compose
     file. A redeploy would only pull the pinned tag again.
+
+    Release notes come from Arcane 3, which looks up the GitHub release of the
+    target version from the image labels. They are only fetched when the
+    update dialog asks for them, and kept per target version.
     """
+
+    def __init__(
+        self,
+        coordinator: ArcaneCoordinator,
+        environment_id: str,
+        container_name: str,
+        description: UpdateEntityDescription,
+    ) -> None:
+        """Initialize the update entity."""
+        super().__init__(coordinator, environment_id, container_name, description)
+        self._notes_target: tuple[str, str | None, str | None] | None = None
+        self._notes: dict[str, Any] = {}
+
+    @property
+    def _target(self) -> tuple[str, str | None, str | None] | None:
+        """Return the image, version and digest the pending update is about."""
+        container = self.container
+        if container is None or not container.update_available:
+            return None
+        return container.image, container.update_version, container.update_digest
+
+    @property
+    def _cached_notes(self) -> dict[str, Any] | None:
+        """Return the release notes fetched for the pending update, if any."""
+        target = self._target
+        if target is None or target != self._notes_target:
+            return None
+        return self._notes
+
+    @property
+    def _offers_release_notes(self) -> bool:
+        """Return whether release notes may exist for the pending update."""
+        if (
+            self._target is None
+            or self.coordinator.client.generation is not ApiGeneration.V3
+            or PERM_IMAGE_UPDATES_READ in self.coordinator.missing_permissions
+        ):
+            return False
+        # Once Arcane said it has no notes for this target, stop offering them.
+        cached = self._cached_notes
+        return cached is None or bool(cached.get("notes"))
 
     @property
     def supported_features(self) -> UpdateEntityFeature:
-        """Return whether this entity may install the update."""
+        """Return what this entity offers beyond reporting a version."""
+        features = UpdateEntityFeature(0)
         if self.coordinator.option(CONF_ALLOW_CONTROL):
-            return UpdateEntityFeature.INSTALL
-        return UpdateEntityFeature(0)
+            features |= UpdateEntityFeature.INSTALL
+        if self._offers_release_notes:
+            features |= UpdateEntityFeature.RELEASE_NOTES
+        return features
+
+    @property
+    def release_url(self) -> str | None:
+        """Return the release page of the update, or the image's releases."""
+        cached = self._cached_notes or {}
+        if (url := cached.get("releaseUrl")) and isinstance(url, str):
+            return url
+        container = self.container
+        return container.release_link if container else None
+
+    async def async_release_notes(self) -> str | None:
+        """Return the release notes of the version the update installs."""
+        if (target := self._target) is None or not self._offers_release_notes:
+            return None
+        if (cached := self._cached_notes) is not None:
+            return cached.get("notes") or None
+        image, version, digest = target
+        try:
+            notes = await self.coordinator.client.async_get_release_notes(
+                self.environment_id, image, version=version, digest=digest
+            )
+        except ArcanePermissionError:
+            self.coordinator.async_note_denied(PERM_IMAGE_UPDATES_READ)
+            self.async_write_ha_state()
+            return None
+        except ArcaneError as err:
+            # Not kept, so the next time the dialog opens asks again.
+            _LOGGER.debug("No release notes for %s: %s", image, err)
+            return None
+        self._notes_target, self._notes = target, notes
+        # The release link and whether notes are offered may have changed.
+        self.async_write_ha_state()
+        text = notes.get("notes")
+        return text.strip() if isinstance(text, str) and text.strip() else None
 
     @property
     def title(self) -> str | None:

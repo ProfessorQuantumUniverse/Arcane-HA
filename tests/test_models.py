@@ -7,6 +7,7 @@ import pytest
 from custom_components.arcane.models import (
     NEWER_IMAGE,
     ArcaneContainer,
+    github_releases_url,
     image_name,
 )
 
@@ -98,3 +99,72 @@ def test_image_references_are_split(image: str, name: str, tag: str | None) -> N
     """Registry ports and pinned digests are not mistaken for tags."""
     assert image_name(image) == name
     assert _container(image).installed_version == tag
+
+
+@pytest.mark.parametrize(
+    ("source", "link"),
+    [
+        (
+            "https://github.com/traefik/whoami",
+            "https://github.com/traefik/whoami/releases",
+        ),
+        (
+            "https://github.com/traefik/whoami.git",
+            "https://github.com/traefik/whoami/releases",
+        ),
+        ("git+https://www.github.com/a/b/tree/main", "https://github.com/a/b/releases"),
+        ("git://github.com/a/b", "https://github.com/a/b/releases"),
+        ("https://gitlab.com/a/b", None),
+        ("https://github.com/only-owner", None),
+        ("https://github.com.evil.example/a/b", None),
+        ("javascript:alert(1)", None),
+        ("https://github.com/a/b%3Cscript", None),
+        ("", None),
+    ],
+)
+def test_github_releases_url(source: str, link: str | None) -> None:
+    """Only a plain GitHub repository address becomes a releases link."""
+    assert github_releases_url(source) == link
+
+
+def test_release_link_comes_from_the_image_labels() -> None:
+    """Docker copies the OCI labels of the image onto the container."""
+    container = ArcaneContainer.from_api(
+        {
+            "id": "abc",
+            "names": ["/app"],
+            "image": "app:1",
+            "labels": {
+                "org.opencontainers.image.source": "https://example.com/app",
+                "org.opencontainers.image.url": "https://github.com/acme/app",
+            },
+        }
+    )
+    assert container.release_link == "https://github.com/acme/app/releases"
+
+
+def test_update_target_is_kept_for_the_release_notes() -> None:
+    """A tag update names its version; a digest update only its digest."""
+    tag = _container(
+        "app:1.2.0",
+        {
+            "hasUpdate": True,
+            "updateType": "tag",
+            "currentVersion": "1.2.0",
+            "latestVersion": "v1.3.0",
+            "latestDigest": "sha256:new",
+        },
+    )
+    assert (tag.update_version, tag.update_digest) == ("v1.3.0", "sha256:new")
+
+    digest = _container(
+        "app:latest",
+        {
+            "hasUpdate": True,
+            "updateType": "digest",
+            "currentVersion": "latest",
+            "latestVersion": "latest",
+            "latestDigest": "sha256:new",
+        },
+    )
+    assert (digest.update_version, digest.update_digest) == (None, "sha256:new")
