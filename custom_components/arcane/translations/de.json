@@ -36,6 +36,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung zu Arcane fehlgeschlagen. Prüfe die URL und ob die Instanz erreichbar ist.",
+      "not_arcane": "Unter dieser Adresse antwortet keine Arcane-API. Prüfe Adresse und Port und ob dort Arcane 2 oder 3 läuft.",
       "invalid_auth": "Arcane hat den API-Key abgelehnt.",
       "insufficient_permissions": "Dem API-Key fehlt die Berechtigung environments:list.",
       "unknown": "Unerwarteter Fehler",
@@ -91,7 +92,7 @@
           "events": "Events auf dem Home Assistant Bus auslösen"
         },
         "data_description": {
-          "update_entities": "Pro Container eine Update Entität anbieten, die per Redeploy auf das neuere Image wechselt.",
+          "update_entities": "Pro Container eine Update Entität anbieten, die das von Arcane gefundene Update installiert.",
           "health_sensors": "Container mit Health Check bekommen einen Sensor Healthy.",
           "entity_prefix": "Geräte als Container x und Project x benennen, damit ein Container und ein Projekt mit gleichem Namen nicht kollidieren. Bereits vorhandene Entity IDs bleiben unverändert.",
           "nest_containers": "Einen Container als Untergerät des Compose Projekts anzeigen, zu dem er gehört.",
@@ -291,6 +292,12 @@
     },
     "container_action_forbidden": {
       "message": "Aktion {action} für Container {name} nicht erlaubt: Dem Arcane-API-Key fehlt die Berechtigung {permission}."
+    },
+    "container_update_failed": {
+      "message": "Update von Container {name} fehlgeschlagen: {error}"
+    },
+    "container_update_forbidden": {
+      "message": "Update von Container {name} nicht erlaubt: Dem Arcane-API-Key fehlt die Berechtigung {permission}."
     },
     "project_action_failed": {
       "message": "Aktion {action} für Projekt {name} fehlgeschlagen: {error}"

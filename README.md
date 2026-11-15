@@ -26,7 +26,9 @@ newer image is waiting.
 
 ## Requirements
 
-Home Assistant 2025.2 or newer, an Arcane instance it can reach, and an Arcane API key.
+Home Assistant 2025.2 or newer, an Arcane 2 or Arcane 3 instance it can reach, and an
+Arcane API key. Which of the two API versions an instance speaks is found out on its
+own, also after you upgrade Arcane.
 
 ## Install
 
@@ -58,9 +60,11 @@ list.
 
 Monitoring needs `environments:list`, `containers:list`, `projects:list`, `images:list`,
 `volumes:list`, `networks:list` and `system:read`. Controlling things adds
-`containers:start`, `containers:stop`, `containers:restart`, `containers:redeploy`,
-`projects:deploy`, `projects:down` and `projects:restart`. Pruning needs `system:prune`
-and upgrading Arcane itself needs `system:upgrade`.
+`containers:start`, `containers:stop`, `containers:restart`, `projects:deploy`,
+`projects:down` and `projects:restart`. Installing container updates needs
+`image-updates:apply` on Arcane 3 and `image-updates:check` on Arcane 2. The redeploy
+buttons need `containers:redeploy`, pruning needs `system:prune` and upgrading Arcane
+itself needs `system:upgrade`.
 
 Only `environments:list` is required. A key without the rest still sets up; the parts it
 cannot reach stay empty and actions fail with an error naming the permission. Whenever
@@ -90,7 +94,7 @@ Arcane refuses a call, the permission lands in a repair under
 | Entity | Type | Notes |
 | --- | --- | --- |
 | *(container name)* | switch | Starts and stops it |
-| Image update | update | Installs by redeploying onto the newer image |
+| Image update | update | Installs through Arcane's updater |
 | Running, Update available | binary sensor | |
 | Healthy | binary sensor | Only with a health check defined |
 | State, Status | sensor | `running`, `exited`, `paused` and so on |
@@ -140,8 +144,27 @@ whatever it already has.
 
 Container updates and the Arcane instance itself both show up under
 **Settings > Updates**, next to core and add-on updates. Installing a container update
-runs Arcane's redeploy. Installing the Arcane update asks Arcane to pull its own newer
-image and restart, so everything here goes unavailable for a moment.
+runs Arcane's own updater, the same as the update action in the Arcane UI. Installing
+the Arcane update asks Arcane to pull its own newer image and restart, so everything
+here goes unavailable for a moment.
+
+**Images pinned to a version.** What counts as an update is Arcane's call. By default
+Arcane watches the tag a container runs for a new digest, which is how `latest` and
+other moving tags are updated. For an image pinned to a version such as `1.2.3`, tell
+Arcane to follow versions with a label on the service:
+
+```yaml
+services:
+  app:
+    image: example/app:1.2.3
+    labels:
+      com.getarcaneapp.arcane.updater.strategy: tag
+      # Optional: stay within one major version.
+      com.getarcaneapp.arcane.updater.constraint: 1.x
+```
+
+Arcane then reports `1.3.0` as the update, and installing it writes the new tag into the
+compose file and recreates the container on it.
 
 An entity only appears in that panel while it has an update and can install it, so with
 control turned off the entities still report versions but stay out of the way.

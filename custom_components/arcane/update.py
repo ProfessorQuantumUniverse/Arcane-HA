@@ -19,7 +19,7 @@ from .const import CONF_ALLOW_CONTROL, CONF_UPDATE_ENTITIES, DOMAIN, MANUFACTURE
 from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity
 from .helpers import action_error, async_setup_entities
 from .models import ArcaneVersion, image_name
-from .permissions import PERM_CONTAINERS_REDEPLOY, PERM_SYSTEM_UPGRADE
+from .permissions import PERM_SYSTEM_UPGRADE, container_update_permission
 
 PARALLEL_UPDATES = 1
 
@@ -73,8 +73,11 @@ def _summary(notes: str | None) -> str | None:
 class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     """Report and install a newer image for a container.
 
-    Installing runs Arcane's redeploy, which pulls the image the container was
-    created from and recreates the container with the same configuration.
+    Installing runs Arcane's own updater for the container, the same as the
+    update action in the Arcane UI. It applies whatever Arcane found: a new
+    digest of a moving tag such as ``latest``, or, for a container whose
+    update policy follows versions, the newer tag it writes into the compose
+    file. A redeploy would only pull the pinned tag again.
     """
 
     @property
@@ -112,24 +115,23 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     async def async_install(
         self, version: str | None, backup: bool, **kwargs: Any
     ) -> None:
-        """Pull the newer image and recreate the container."""
+        """Let Arcane apply the update it found for the container."""
         if (container := self.container) is None:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="container_not_found",
                 translation_placeholders={"name": self.container_name},
             )
+        client = self.coordinator.client
         try:
-            await self.coordinator.client.async_container_action(
-                self.environment_id, container.id, "redeploy"
-            )
+            await client.async_update_container(self.environment_id, container.id)
         except ArcaneError as err:
             raise action_error(
                 self.coordinator,
                 err,
-                permission=PERM_CONTAINERS_REDEPLOY,
-                action_key="container_action",
-                placeholders={"action": "redeploy", "name": self.container_name},
+                permission=container_update_permission(client.generation),
+                action_key="container_update",
+                placeholders={"name": self.container_name},
             ) from err
         await self.coordinator.async_request_refresh()
 

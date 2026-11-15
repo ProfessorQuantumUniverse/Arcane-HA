@@ -14,7 +14,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.arcane.api import (
     ArcaneAuthenticationError,
     ArcaneConnectionError,
+    ArcaneNotFoundError,
     ArcanePermissionError,
+    ArcaneResponseError,
 )
 from custom_components.arcane.const import DOMAIN
 
@@ -48,6 +50,8 @@ async def test_user_flow(hass: HomeAssistant, mock_client: AsyncMock) -> None:
         (ArcaneAuthenticationError("nope"), "invalid_auth"),
         (ArcaneConnectionError("down"), "cannot_connect"),
         (ArcanePermissionError("forbidden"), "insufficient_permissions"),
+        (ArcaneNotFoundError("HTTP 404"), "not_arcane"),
+        (ArcaneResponseError("HTTP 500"), "unknown"),
         (RuntimeError("boom"), "unknown"),
     ],
 )

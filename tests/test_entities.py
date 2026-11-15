@@ -15,13 +15,16 @@ from homeassistant.const import (
     STATE_ON,
 )
 from homeassistant.core import Event, HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.arcane.api import (
+    ApiGeneration,
     ArcaneAuthenticationError,
     ArcaneConnectionError,
     ArcanePermissionError,
+    ArcaneResponseError,
 )
 from custom_components.arcane.const import (
     CONF_ALLOW_CONTROL,
@@ -240,7 +243,7 @@ async def test_unload(
 async def test_update_entity(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
-    """The update entity reports the newer image and redeploys on install."""
+    """The update entity reports the newer image and lets Arcane apply it."""
     await _setup(hass, mock_config_entry)
 
     state = hass.states.get("update.container_homeassistant_image_update")
@@ -254,9 +257,62 @@ async def test_update_entity(
         {ATTR_ENTITY_ID: "update.container_homeassistant_image_update"},
         blocking=True,
     )
-    mock_client.async_container_action.assert_awaited_once_with(
-        "0", "c1ffee", "redeploy"
+    # Arcane's updater, not a redeploy: only that one moves a pinned tag on.
+    mock_client.async_update_container.assert_awaited_once_with("0", "c1ffee")
+    mock_client.async_container_action.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("generation", "permission"),
+    [
+        (ApiGeneration.V2, "image-updates:check"),
+        (ApiGeneration.V3, "image-updates:apply"),
+    ],
+)
+async def test_refused_update_install_names_the_permission(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    generation: ApiGeneration,
+    permission: str,
+) -> None:
+    """Arcane 2 and 3 gate applying an update on different permissions."""
+    mock_client.generation = generation
+    mock_client.async_update_container.side_effect = ArcanePermissionError("nope")
+    await _setup(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "update",
+            "install",
+            {ATTR_ENTITY_ID: "update.container_homeassistant_image_update"},
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "container_update_forbidden"
+    assert err.value.translation_placeholders["permission"] == permission
+    assert permission in mock_config_entry.runtime_data.missing_permissions
+
+
+async def test_failed_update_install_is_reported(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """An update Arcane could not apply surfaces its reason."""
+    mock_client.async_update_container.side_effect = ArcaneResponseError(
+        "manifest unknown"
     )
+    await _setup(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "update",
+            "install",
+            {ATTR_ENTITY_ID: "update.container_homeassistant_image_update"},
+            blocking=True,
+        )
+
+    assert err.value.translation_key == "container_update_failed"
+    assert err.value.translation_placeholders["error"] == "manifest unknown"
 
 
 async def test_read_only_mode(

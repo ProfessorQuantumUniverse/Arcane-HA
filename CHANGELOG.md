@@ -5,6 +5,36 @@ and a published GitHub release, and that release is what HACS installs. The vers
 `custom_components/arcane/manifest.json` is the one being released; the release workflow
 refuses a tag that disagrees with it or with this file.
 
+## Unreleased
+
+### Added
+
+- Support for Arcane 3.0
+  ([#11](https://github.com/ProfessorQuantumUniverse/Arcane-HA/issues/11)). Arcane 3.0
+  moved its whole REST API: `/api/app-version` became `/api/app/version`, every route
+  under `/api/environments/{id}` moved to `/api/agents/{id}`, and starting, stopping or
+  deploying is now an `action` parameter instead of a path of its own. The integration
+  finds out which of the two an instance speaks from its version endpoint and keeps
+  working with Arcane 2 as well. It checks again on every poll, so upgrading Arcane from
+  Home Assistant does not break the integration on the way.
+- Setup tells you when no Arcane API answers at the address, instead of reporting an
+  unexpected error.
+
+### Changed
+
+- Installing a container update now runs Arcane's own updater, the same as the update
+  action in the Arcane UI, instead of a redeploy
+  ([#10](https://github.com/ProfessorQuantumUniverse/Arcane-HA/issues/10)). A redeploy
+  only pulls the tag the container already runs, so an image pinned to a version such as
+  `1.2.3` never moved on. Arcane's updater applies what it found: a new digest of a
+  moving tag, or, for a container with a version based update policy, the newer tag,
+  which it also writes into the compose file. An update Arcane could not apply is now
+  reported as an error with Arcane's reason.
+- **API key permissions:** installing a container update needs `image-updates:apply` on
+  Arcane 3 (`image-updates:check` on Arcane 2) instead of `containers:redeploy`. Only the
+  redeploy buttons still need `containers:redeploy`. A key without the new permission
+  gets a repair naming it the first time an install is refused.
+
 ## 0.5.2 (2026-10-10)
 
 ### Fixed

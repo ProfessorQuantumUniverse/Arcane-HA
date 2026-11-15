@@ -17,6 +17,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final
 
+from .api import ApiGeneration
 from .const import (
     CONF_ALLOW_CONTROL,
     CONF_HOST_STATS,
@@ -50,6 +51,21 @@ PERM_NETWORKS_LIST: Final = "networks:list"
 PERM_SYSTEM_READ: Final = "system:read"
 PERM_SYSTEM_PRUNE: Final = "system:prune"
 PERM_SYSTEM_UPGRADE: Final = "system:upgrade"
+PERM_IMAGE_UPDATES_CHECK: Final = "image-updates:check"
+PERM_IMAGE_UPDATES_APPLY: Final = "image-updates:apply"
+
+
+def container_update_permission(generation: ApiGeneration | None) -> str:
+    """Return the permission Arcane gates installing a container update on.
+
+    Arcane 2 let any key that may check for updates also apply one; Arcane 3
+    split that into a permission of its own. Until the generation is known the
+    newer one is named, since that is what a fresh setup runs.
+    """
+    if generation is ApiGeneration.V2:
+        return PERM_IMAGE_UPDATES_CHECK
+    return PERM_IMAGE_UPDATES_APPLY
+
 
 # The permission each container and project action is gated on. Both mirror
 # ``CONTAINER_ACTIONS`` and ``PROJECT_ACTIONS`` of the API client: deploying a
@@ -100,15 +116,19 @@ def _option(options: Mapping[str, Any], key: str) -> Any:
     return options.get(key, DEFAULT_OPTIONS[key])
 
 
-def required_permissions(options: Mapping[str, Any]) -> RequiredPermissions:
+def required_permissions(
+    options: Mapping[str, Any], generation: ApiGeneration | None = None
+) -> RequiredPermissions:
     """Return the permissions the API key needs for these options.
 
     Only what the options actually ask for is listed: switching a part off
-    stops its requests, so it also stops needing its permission.
+    stops its requests, so it also stops needing its permission. A few
+    permissions differ between Arcane versions, so the API generation of the
+    instance is taken into account when it is known.
     """
     return RequiredPermissions(
         monitoring=_unique(_monitoring_permissions(options)),
-        control=_unique(_control_permissions(options)),
+        control=_unique(_control_permissions(options, generation)),
     )
 
 
@@ -137,15 +157,15 @@ def _monitoring_permissions(options: Mapping[str, Any]) -> list[str]:
     return permissions
 
 
-def _control_permissions(options: Mapping[str, Any]) -> list[str]:
+def _control_permissions(
+    options: Mapping[str, Any], generation: ApiGeneration | None
+) -> list[str]:
     """Return the permissions the switches, buttons and installs need."""
     if not _option(options, CONF_ALLOW_CONTROL):
         return []
 
     containers = _option(options, CONF_MONITOR_CONTAINERS)
     projects = _option(options, CONF_MONITOR_PROJECTS)
-    # Installing a container update redeploys the container, which is what the
-    # redeploy button does as well.
     redeploy = _option(options, CONF_REDEPLOY_BUTTONS)
     updates = _option(options, CONF_UPDATE_ENTITIES)
 
@@ -156,8 +176,12 @@ def _control_permissions(options: Mapping[str, Any]) -> list[str]:
             PERM_CONTAINERS_STOP,
             PERM_CONTAINERS_RESTART,
         ]
-        if redeploy or updates:
+        if redeploy:
             permissions.append(PERM_CONTAINERS_REDEPLOY)
+        if updates:
+            # Installing a container update runs Arcane's own updater rather
+            # than a redeploy, so it needs the permission that one is gated on.
+            permissions.append(container_update_permission(generation))
     if projects:
         permissions += [
             PERM_PROJECTS_DEPLOY,

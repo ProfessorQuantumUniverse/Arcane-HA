@@ -32,6 +32,7 @@ async def async_get_config_entry_diagnostics(
             "missing": coordinator.missing_permissions,
         },
         "version": data.version,
+        "api_generation": coordinator.client.generation,
         "environments": [
             {
                 "id": environment.id,

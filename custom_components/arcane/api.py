@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from enum import StrEnum
 from http import HTTPStatus
 from typing import Any, Final
 from urllib.parse import quote, urlsplit
@@ -26,13 +27,43 @@ HEADER_API_KEY: Final = "X-Api-Key"
 
 ALLOWED_SCHEMES: Final = ("http", "https")
 
-# Only these actions may be built into a request path.
+
+class ApiGeneration(StrEnum):
+    """The layout of the Arcane REST API an instance speaks.
+
+    Arcane 3.0 moved every per-environment route from ``/environments/{id}``
+    to ``/agents/{id}`` and turned most action path segments into an
+    ``action`` query parameter. The payloads themselves did not change, so
+    only the request paths depend on the generation.
+    """
+
+    V2 = "2"
+    V3 = "3"
+
+
+# The version endpoint of each generation. Both answer with the same payload.
+_VERSION_PATHS: Final[dict[ApiGeneration, tuple[str, ...]]] = {
+    ApiGeneration.V3: ("app", "version"),
+    ApiGeneration.V2: ("app-version",),
+}
+
+# The path segment every per-environment route starts with.
+_ENVIRONMENTS_SEGMENT: Final[dict[ApiGeneration, str]] = {
+    ApiGeneration.V3: "agents",
+    ApiGeneration.V2: "environments",
+}
+
+# Only these actions may be built into a request.
 CONTAINER_ACTIONS: Final = ("start", "stop", "restart", "redeploy")
 PROJECT_ACTIONS: Final = ("up", "down", "restart", "redeploy")
 
 # Arcane answers these project operations with a newline delimited log stream
 # instead of a JSON envelope.
 STREAMING_PROJECT_ACTIONS: Final = ("up", "redeploy")
+
+# Redeploying a container has a route of its own in both generations. The
+# other container actions are a query parameter of the container in 3.0.
+_CONTAINER_ROUTE_ACTIONS: Final = ("redeploy",)
 
 # Arcane paginates every list endpoint; ``-1`` asks for the full set.
 _ALL_ITEMS: Final = "-1"
@@ -86,6 +117,14 @@ class ArcaneResponseError(ArcaneError):
     """Raised when Arcane answers with an unexpected payload or status."""
 
 
+class ArcaneNotFoundError(ArcaneResponseError):
+    """Raised when Arcane answers with HTTP 404.
+
+    Telling this apart is what lets the client find out which API generation
+    an instance speaks: the version endpoint of the other one does not exist.
+    """
+
+
 def validate_url(url: str) -> str:
     """Return a normalized instance URL, or raise ``ValueError``.
 
@@ -130,6 +169,27 @@ def _stream_done(line: bytes) -> bool:
     return frame is not None and frame.get("done") is True
 
 
+def _update_failure(result: dict[str, Any]) -> str | None:
+    """Return why a container update failed, if Arcane reports that it did.
+
+    Arcane answers a finished update with HTTP 200 even when it could not
+    apply it, and carries the outcome in the counters and the per resource
+    items of the result instead.
+    """
+    items = result.get("items")
+    errors = [
+        _sanitize(str(item["error"]))
+        for item in (items if isinstance(items, list) else ())
+        if isinstance(item, dict) and item.get("error")
+    ]
+    failed = result.get("failed")
+    if errors:
+        return errors[0]
+    if isinstance(failed, int) and failed > 0:
+        return "Arcane could not apply the update"
+    return None
+
+
 def _sanitize(text: str) -> str:
     """Return text that is safe to put into an error message or log line."""
     return "".join(
@@ -164,8 +224,14 @@ class ArcaneClient:
         api_key: str,
         *,
         timeout: int = DEFAULT_TIMEOUT,
+        generation: ApiGeneration | None = None,
     ) -> None:
-        """Initialize the client for a single Arcane instance."""
+        """Initialize the client for a single Arcane instance.
+
+        The API generation is found out on the first call when it is not
+        given, and again on every version request, so an instance that is
+        upgraded while Home Assistant runs keeps working.
+        """
         api_key = api_key.strip()
         if not api_key:
             raise ValueError("The API key must not be empty")
@@ -181,6 +247,12 @@ class ArcaneClient:
         )
         self._api_key = api_key
         self._timeout = ClientTimeout(total=timeout)
+        self._generation = generation
+
+    @property
+    def generation(self) -> ApiGeneration | None:
+        """Return the API generation of the instance, once it is known."""
+        return self._generation
 
     def _url(self, *segments: str) -> URL:
         """Build an API URL from fully escaped path segments.
@@ -192,6 +264,21 @@ class ArcaneClient:
         """
         path = "/".join(quote(str(segment), safe="") for segment in segments)
         return URL(self._base_url + path, encoded=True)
+
+    async def _environments_url(self, *segments: str) -> URL:
+        """Build the URL of a route under the environment list.
+
+        Its path differs between the API generations, so the generation is
+        found out first if no request has told it yet.
+        """
+        if self._generation is None:
+            await self.async_get_version()
+        generation = self._generation or ApiGeneration.V3
+        return self._url(_ENVIRONMENTS_SEGMENT[generation], *segments)
+
+    async def _environment_url(self, environment_id: str, *segments: str) -> URL:
+        """Build the URL of a route that belongs to one environment."""
+        return await self._environments_url(environment_id, *segments)
 
     async def _request(
         self,
@@ -243,9 +330,12 @@ class ArcaneClient:
                     "utf-8", "replace"
                 )
             )
-            raise ArcaneResponseError(
-                f"Arcane returned HTTP {response.status} for {url}: {body}"
+            error = (
+                ArcaneNotFoundError
+                if response.status == HTTPStatus.NOT_FOUND
+                else ArcaneResponseError
             )
+            raise error(f"Arcane returned HTTP {response.status} for {url}: {body}")
 
         if (length := response.content_length) is not None and (
             length > MAX_RESPONSE_BYTES
@@ -271,7 +361,9 @@ class ArcaneClient:
         except ValueError as err:
             raise ArcaneResponseError(f"Invalid JSON from {url}") from err
 
-    async def _stream(self, url: URL, *, timeout: int) -> None:
+    async def _stream(
+        self, url: URL, *, timeout: int, params: dict[str, Any] | None = None
+    ) -> None:
         """Run an operation that answers with a newline delimited log stream.
 
         The stream ends with ``{"done": true}`` on success or carries an
@@ -282,6 +374,7 @@ class ArcaneClient:
             response = await self._session.request(
                 "POST",
                 url,
+                params=params,
                 headers={HEADER_API_KEY: self._api_key},
                 timeout=ClientTimeout(total=timeout),
                 allow_redirects=False,
@@ -334,10 +427,36 @@ class ArcaneClient:
         return payload["data"]
 
     async def async_get_version(self) -> dict[str, Any]:
-        """Return version information about the Arcane instance."""
-        payload = await self._request("GET", self._url("app-version"))
+        """Return version information about the Arcane instance.
+
+        This is also how the API generation is found out: the version endpoint
+        of the generation the instance does not speak answers with 404. The
+        generation already known is asked first, so a steady instance costs a
+        single request, and one upgraded in the meantime is noticed here.
+        """
+        known = self._generation or ApiGeneration.V3
+        order = [known, *(item for item in ApiGeneration if item is not known)]
+        for generation in order[:-1]:
+            try:
+                return self._accept_version(
+                    generation,
+                    await self._request("GET", self._url(*_VERSION_PATHS[generation])),
+                )
+            except ArcaneNotFoundError:
+                continue
+        generation = order[-1]
+        return self._accept_version(
+            generation,
+            await self._request("GET", self._url(*_VERSION_PATHS[generation])),
+        )
+
+    def _accept_version(
+        self, generation: ApiGeneration, payload: Any
+    ) -> dict[str, Any]:
+        """Remember the generation whose version endpoint answered."""
         if not isinstance(payload, dict):
             raise ArcaneResponseError("Unexpected payload for the version endpoint")
+        self._generation = generation
         return payload
 
     async def async_get_environment_version(
@@ -345,7 +464,7 @@ class ArcaneClient:
     ) -> dict[str, Any]:
         """Return the Arcane version and update state of one environment."""
         data = await self._get_data(
-            self._url("environments", environment_id, "version")
+            await self._environment_url(environment_id, "version")
         )
         return data if isinstance(data, dict) else {}
 
@@ -357,13 +476,15 @@ class ArcaneClient:
         """
         await self._request(
             "POST",
-            self._url("environments", environment_id, "system", "upgrade"),
+            await self._environment_url(environment_id, "system", "upgrade"),
             timeout=ACTION_TIMEOUT,
         )
 
     async def async_get_environments(self) -> list[dict[str, Any]]:
         """Return every environment the API key may see."""
-        data = await self._get_data(self._url("environments"), {"limit": _ALL_ITEMS})
+        data = await self._get_data(
+            await self._environments_url(), {"limit": _ALL_ITEMS}
+        )
         return data if isinstance(data, list) else []
 
     async def async_get_containers(
@@ -375,7 +496,7 @@ class ArcaneClient:
     ) -> list[dict[str, Any]]:
         """Return all containers of an environment."""
         data = await self._get_data(
-            self._url("environments", environment_id, "containers"),
+            await self._environment_url(environment_id, "containers"),
             {
                 "limit": _ALL_ITEMS,
                 "includeInternal": str(include_internal).lower(),
@@ -387,7 +508,7 @@ class ArcaneClient:
     async def async_get_projects(self, environment_id: str) -> list[dict[str, Any]]:
         """Return all compose projects of an environment."""
         data = await self._get_data(
-            self._url("environments", environment_id, "projects"),
+            await self._environment_url(environment_id, "projects"),
             {"limit": _ALL_ITEMS},
         )
         return data if isinstance(data, list) else []
@@ -395,28 +516,29 @@ class ArcaneClient:
     async def async_get_image_counts(self, environment_id: str) -> dict[str, Any]:
         """Return image usage counts of an environment."""
         data = await self._get_data(
-            self._url("environments", environment_id, "images", "counts")
+            await self._environment_url(environment_id, "images", "counts")
         )
         return data if isinstance(data, dict) else {}
 
     async def async_get_volume_counts(self, environment_id: str) -> dict[str, Any]:
         """Return volume usage counts of an environment."""
         data = await self._get_data(
-            self._url("environments", environment_id, "volumes", "counts")
+            await self._environment_url(environment_id, "volumes", "counts")
         )
         return data if isinstance(data, dict) else {}
 
     async def async_get_network_counts(self, environment_id: str) -> dict[str, Any]:
         """Return network usage counts of an environment."""
         data = await self._get_data(
-            self._url("environments", environment_id, "networks", "counts")
+            await self._environment_url(environment_id, "networks", "counts")
         )
         return data if isinstance(data, dict) else {}
 
     async def async_get_docker_info(self, environment_id: str) -> dict[str, Any]:
         """Return Docker daemon information of an environment."""
         payload = await self._request(
-            "GET", self._url("environments", environment_id, "system", "docker", "info")
+            "GET",
+            await self._environment_url(environment_id, "system", "docker", "info"),
         )
         return payload if isinstance(payload, dict) else {}
 
@@ -426,13 +548,43 @@ class ArcaneClient:
         """Run start, stop, restart or redeploy on a container."""
         if action not in CONTAINER_ACTIONS:
             raise ValueError(f"Unsupported container action: {action}")
+        url = await self._environment_url(environment_id, "containers", container_id)
+        params: dict[str, Any] | None = None
+        if self._generation is ApiGeneration.V2 or action in _CONTAINER_ROUTE_ACTIONS:
+            url = self._append(url, action)
+        else:
+            params = {"action": action}
         await self._request(
             "POST",
-            self._url(
-                "environments", environment_id, "containers", container_id, action
-            ),
+            url,
+            params=params,
             timeout=DEPLOY_TIMEOUT if action == "redeploy" else ACTION_TIMEOUT,
         )
+
+    async def async_update_container(
+        self, environment_id: str, container_id: str
+    ) -> dict[str, Any]:
+        """Apply Arcane's update strategy to one container.
+
+        Unlike a redeploy, which pulls the reference the container was created
+        from again, this lets Arcane decide what the update is: a new digest of
+        a moving tag, or a newer tag that it writes into the compose file of a
+        container whose update policy follows versions. The call waits until
+        Arcane is done and reports a failed update as an error.
+        """
+        result = await self._request(
+            "POST",
+            await self._environment_url(
+                environment_id, "containers", container_id, "update"
+            ),
+            timeout=DEPLOY_TIMEOUT,
+        )
+        data = result.get("data") if isinstance(result, dict) else None
+        if not isinstance(data, dict):
+            return {}
+        if (failure := _update_failure(data)) is not None:
+            raise ArcaneResponseError(failure)
+        return data
 
     async def async_project_action(
         self, environment_id: str, project_id: str, action: str
@@ -440,11 +592,23 @@ class ArcaneClient:
         """Bring a compose project up or down, restart or redeploy it."""
         if action not in PROJECT_ACTIONS:
             raise ValueError(f"Unsupported project action: {action}")
-        url = self._url("environments", environment_id, "projects", project_id, action)
+        url = await self._environment_url(environment_id, "projects", project_id)
+        params: dict[str, Any] | None = None
+        if self._generation is ApiGeneration.V2:
+            url = self._append(url, action)
+        else:
+            if action in STREAMING_PROJECT_ACTIONS:
+                url = self._append(url, "deploy")
+            params = {"action": action}
         if action in STREAMING_PROJECT_ACTIONS:
-            await self._stream(url, timeout=DEPLOY_TIMEOUT)
+            await self._stream(url, timeout=DEPLOY_TIMEOUT, params=params)
             return
-        await self._request("POST", url, timeout=ACTION_TIMEOUT)
+        await self._request("POST", url, params=params, timeout=ACTION_TIMEOUT)
+
+    @staticmethod
+    def _append(url: URL, segment: str) -> URL:
+        """Add one fixed path segment to an already escaped URL."""
+        return URL(f"{url}/{quote(segment, safe='')}", encoded=True)
 
     async def async_prune(
         self, environment_id: str, *, unused_images: bool
@@ -461,7 +625,7 @@ class ArcaneClient:
         }
         result = await self._request(
             "POST",
-            self._url("environments", environment_id, "system", "prune"),
+            await self._environment_url(environment_id, "system", "prune"),
             json=payload,
             timeout=DEPLOY_TIMEOUT,
         )
@@ -478,8 +642,8 @@ class ArcaneClient:
         sends the current sample immediately after the handshake, so a single
         sample is taken and the socket is closed again rather than held open.
         """
-        url = self._url(
-            "environments", environment_id, "ws", "system", "stats"
+        url = (
+            await self._environment_url(environment_id, "ws", "system", "stats")
         ).with_query({"interval": str(HOST_STATS_INTERVAL)})
         try:
             async with (

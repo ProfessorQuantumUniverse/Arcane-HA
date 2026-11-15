@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.arcane.api import ApiGeneration
 from custom_components.arcane.const import DOMAIN
 
 VERSION_PAYLOAD = {
@@ -135,6 +136,7 @@ def mock_client() -> Generator[AsyncMock]:
         patch("custom_components.arcane.config_flow.ArcaneClient", new=client_class),
     ):
         client = client_class.return_value
+        client.generation = ApiGeneration.V3
         client.async_get_version.return_value = VERSION_PAYLOAD
         client.async_get_environments.return_value = ENVIRONMENTS_PAYLOAD
         client.async_get_containers.return_value = CONTAINERS_PAYLOAD
@@ -146,4 +148,5 @@ def mock_client() -> Generator[AsyncMock]:
         client.async_get_host_stats.return_value = HOST_STATS
         client.async_get_environment_version.return_value = REMOTE_VERSION_PAYLOAD
         client.async_prune.return_value = {"spaceReclaimed": 1024}
+        client.async_update_container.return_value = {"updated": 1, "failed": 0}
         yield client

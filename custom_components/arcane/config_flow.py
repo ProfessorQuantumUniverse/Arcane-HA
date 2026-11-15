@@ -39,6 +39,7 @@ from .api import (
     ArcaneClient,
     ArcaneConnectionError,
     ArcaneError,
+    ArcaneNotFoundError,
     ArcanePermissionError,
     validate_url,
 )
@@ -103,6 +104,17 @@ STEP_REAUTH_DATA_SCHEMA = vol.Schema(
 )
 
 
+# The form error each API failure is shown as, most specific first. A missing
+# version endpoint means the address does not point at an Arcane API this
+# integration knows.
+_FORM_ERRORS: tuple[tuple[type[ArcaneError], str], ...] = (
+    (ArcaneAuthenticationError, "invalid_auth"),
+    (ArcanePermissionError, "insufficient_permissions"),
+    (ArcaneConnectionError, "cannot_connect"),
+    (ArcaneNotFoundError, "not_arcane"),
+)
+
+
 def _normalize_url(url: str) -> str:
     """Return the instance URL with a scheme and without a trailing slash.
 
@@ -153,6 +165,20 @@ class ArcaneConfigFlow(ConfigFlow, domain=DOMAIN):
         host = urlparse(data[CONF_URL]).hostname or data[CONF_URL]
         return host, version.get("currentVersion")
 
+    async def _async_check(self, data: dict[str, Any]) -> tuple[str, str | None]:
+        """Validate the input and return the host and the form error, if any."""
+        try:
+            host, _version = await self._async_validate(data)
+        except ArcaneError as err:
+            return "", next(
+                (key for kind, key in _FORM_ERRORS if isinstance(err, kind)),
+                "unknown",
+            )
+        except Exception:
+            _LOGGER.exception("Unexpected error while connecting to Arcane")
+            return "", "unknown"
+        return host, None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -166,19 +192,9 @@ class ArcaneConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_url"
         if user_input is not None and not errors:
             self._async_abort_entries_match({CONF_URL: user_input[CONF_URL]})
-            try:
-                host, _version = await self._async_validate(user_input)
-            except ArcaneAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except ArcanePermissionError:
-                errors["base"] = "insufficient_permissions"
-            except ArcaneConnectionError:
-                errors["base"] = "cannot_connect"
-            except ArcaneError:
-                errors["base"] = "unknown"
-            except Exception:
-                _LOGGER.exception("Unexpected error while connecting to Arcane")
-                errors["base"] = "unknown"
+            host, error = await self._async_check(user_input)
+            if error is not None:
+                errors["base"] = error
             else:
                 return self.async_create_entry(title=host, data=user_input)
 
@@ -203,19 +219,9 @@ class ArcaneConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             data = {**entry.data, **user_input}
-            try:
-                await self._async_validate(data)
-            except ArcaneAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except ArcanePermissionError:
-                errors["base"] = "insufficient_permissions"
-            except ArcaneConnectionError:
-                errors["base"] = "cannot_connect"
-            except ArcaneError:
-                errors["base"] = "unknown"
-            except Exception:
-                _LOGGER.exception("Unexpected error while connecting to Arcane")
-                errors["base"] = "unknown"
+            _host, error = await self._async_check(data)
+            if error is not None:
+                errors["base"] = error
             else:
                 return self.async_update_reload_and_abort(entry, data=data)
 
@@ -245,19 +251,9 @@ class ArcaneConfigFlow(ConfigFlow, domain=DOMAIN):
                 if self._async_url_taken(user_input[CONF_URL], entry.entry_id):
                     return self.async_abort(reason="already_configured")
         if user_input is not None and not errors:
-            try:
-                await self._async_validate(user_input)
-            except ArcaneAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except ArcanePermissionError:
-                errors["base"] = "insufficient_permissions"
-            except ArcaneConnectionError:
-                errors["base"] = "cannot_connect"
-            except ArcaneError:
-                errors["base"] = "unknown"
-            except Exception:
-                _LOGGER.exception("Unexpected error while connecting to Arcane")
-                errors["base"] = "unknown"
+            _host, error = await self._async_check(user_input)
+            if error is not None:
+                errors["base"] = error
             else:
                 return self.async_update_reload_and_abort(entry, data=user_input)
 
@@ -342,8 +338,10 @@ class ArcaneOptionsFlow(OptionsFlow):
             return await self.async_step_init()
 
         options = {**DEFAULT_OPTIONS, **self.config_entry.options}
-        needed = required_permissions(options)
         coordinator = getattr(self.config_entry, "runtime_data", None)
+        needed = required_permissions(
+            options, coordinator.client.generation if coordinator is not None else None
+        )
         missing = coordinator.missing_permissions if coordinator is not None else []
 
         return self.async_show_form(

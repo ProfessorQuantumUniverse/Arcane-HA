@@ -99,7 +99,7 @@ class ArcaneCoordinator(DataUpdateCoordinator[ArcaneData]):
     @property
     def required_permissions(self) -> RequiredPermissions:
         """Return the permissions the options in use need."""
-        return required_permissions(self.config_entry.options)
+        return required_permissions(self.config_entry.options, self.client.generation)
 
     @property
     def missing_permissions(self) -> list[str]:

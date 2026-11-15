@@ -11,7 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.arcane.api import ArcanePermissionError
+from custom_components.arcane.api import ApiGeneration, ArcanePermissionError
 from custom_components.arcane.const import (
     CONF_ALLOW_CONTROL,
     CONF_HOST_STATS,
@@ -19,6 +19,7 @@ from custom_components.arcane.const import (
     CONF_MONITOR_PROJECTS,
     CONF_MONITOR_RESOURCES,
     CONF_PRUNE_BUTTON,
+    CONF_REDEPLOY_BUTTONS,
     CONF_UPDATE_ENTITIES,
     DEFAULT_OPTIONS,
     DOMAIN,
@@ -59,12 +60,40 @@ def test_defaults_need_read_and_control() -> None:
         "containers:start",
         "containers:stop",
         "containers:restart",
-        "containers:redeploy",
+        "image-updates:apply",
         "projects:deploy",
         "projects:down",
         "projects:restart",
         "system:upgrade",
     ]
+
+
+@pytest.mark.parametrize(
+    ("generation", "permission"),
+    [
+        (None, "image-updates:apply"),
+        (ApiGeneration.V2, "image-updates:check"),
+        (ApiGeneration.V3, "image-updates:apply"),
+    ],
+)
+def test_installing_updates_needs_the_updater_permission(
+    generation: ApiGeneration | None, permission: str
+) -> None:
+    """Installing runs Arcane's updater, which Arcane 2 and 3 gate differently."""
+    needed = required_permissions({}, generation)
+
+    assert permission in needed.control
+    assert "containers:redeploy" not in needed.control
+
+
+def test_redeploy_buttons_need_redeploy() -> None:
+    """Only the redeploy buttons still redeploy a container."""
+    needed = required_permissions(
+        {**DEFAULT_OPTIONS, CONF_REDEPLOY_BUTTONS: True, CONF_UPDATE_ENTITIES: False}
+    )
+
+    assert "containers:redeploy" in needed.control
+    assert not any(item.startswith("image-updates:") for item in needed.control)
 
 
 def test_read_only_options_need_no_control() -> None:

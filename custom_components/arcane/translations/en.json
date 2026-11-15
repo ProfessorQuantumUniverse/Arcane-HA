@@ -36,6 +36,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Arcane. Check the URL and that the instance is reachable.",
+      "not_arcane": "No Arcane API answered at this address. Check the address and port, and that it runs Arcane 2 or 3.",
       "invalid_auth": "Arcane rejected the API key.",
       "insufficient_permissions": "The API key is missing the environments:list permission.",
       "unknown": "Unexpected error",
@@ -91,7 +92,7 @@
           "events": "Fire events on the Home Assistant bus"
         },
         "data_description": {
-          "update_entities": "Offer an update entity per container that redeploys it onto the newer image.",
+          "update_entities": "Offer an update entity per container that installs the update Arcane found for it.",
           "health_sensors": "Add a Healthy sensor to containers that define a health check.",
           "entity_prefix": "Name devices Container x and Project x so a container and a project of the same name do not collide. Entity IDs that already exist keep their current name.",
           "nest_containers": "Show a container as a child device of the Compose project it belongs to.",
@@ -291,6 +292,12 @@
     },
     "container_action_forbidden": {
       "message": "Not allowed to {action} container {name}: the Arcane API key is missing the {permission} permission."
+    },
+    "container_update_failed": {
+      "message": "Failed to update container {name}: {error}"
+    },
+    "container_update_forbidden": {
+      "message": "Not allowed to update container {name}: the Arcane API key is missing the {permission} permission."
     },
     "project_action_failed": {
       "message": "Failed to {action} project {name}: {error}"
