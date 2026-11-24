@@ -5,7 +5,7 @@ and a published GitHub release, and that release is what HACS installs. The vers
 `custom_components/arcane/manifest.json` is the one being released; the release workflow
 refuses a tag that disagrees with it or with this file.
 
-## Unreleased
+## 0.6.1 (2026-11-24)
 
 ### Fixed
 
