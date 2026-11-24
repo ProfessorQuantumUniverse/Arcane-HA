@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import ArcaneError, ArcanePermissionError
 from .const import DOMAIN
+from .entity import async_register_parent_devices
 
 if TYPE_CHECKING:
     from .coordinator import ArcaneCoordinator
@@ -38,19 +39,25 @@ def async_setup_entities(
     def _async_add_new() -> None:
         new_entities: list[Entity] = []
         for environment_id, environment in coordinator.data.environments.items():
-            if environments is not None:
-                key = ("environment", environment_id)
-                if key not in known:
-                    known.add(key)
+            # The devices containers and projects hang below have to exist
+            # before those, also on a platform that has no entity for them.
+            new_parents = [
+                project_id
+                for project_id in environment.projects
+                if ("project", environment_id, project_id) not in known
+            ]
+            if new_parents or ("environment", environment_id) not in known:
+                async_register_parent_devices(coordinator, environment_id, new_parents)
+
+            key = ("environment", environment_id)
+            if key not in known:
+                known.add(key)
+                if environments is not None:
                     new_entities.extend(environments(environment_id))
-            # Projects come before containers so a project device already
-            # exists when a container of that project points at it.
-            if projects is not None:
-                for project_id in environment.projects:
-                    key = ("project", environment_id, project_id)
-                    if key not in known:
-                        known.add(key)
-                        new_entities.extend(projects(environment_id, project_id))
+            for project_id in new_parents:
+                known.add(("project", environment_id, project_id))
+                if projects is not None:
+                    new_entities.extend(projects(environment_id, project_id))
             if containers is not None:
                 for name in environment.containers:
                     key = ("container", environment_id, name)

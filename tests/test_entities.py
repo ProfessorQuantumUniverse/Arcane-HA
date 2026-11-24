@@ -18,6 +18,9 @@ from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.test_util.aiohttp import (
+    AiohttpClientMocker,
+)
 
 from custom_components.arcane.api import (
     ApiGeneration,
@@ -392,13 +395,23 @@ async def test_health_sensor_only_where_docker_reports_health(
 
 
 async def test_device_hierarchy(
-    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """A container of a Compose project hangs below that project."""
     await _setup(hass, mock_config_entry)
+    # Linking by identifier is deprecated since Home Assistant 2026.8.
+    assert "via_device" not in caplog.text
 
     registry = dr.async_get(hass)
-    devices = {device.name: device for device in registry.devices.values()}
+    devices = {
+        device.name: device
+        for device in dr.async_entries_for_config_entry(
+            registry, mock_config_entry.entry_id
+        )
+    }
 
     assert devices["Container homeassistant"].via_device_id == (
         devices["Project smarthome"].id
@@ -419,7 +432,12 @@ async def test_prefix_and_nesting_can_be_switched_off(
     )
 
     registry = dr.async_get(hass)
-    devices = {device.name: device for device in registry.devices.values()}
+    devices = {
+        device.name: device
+        for device in dr.async_entries_for_config_entry(
+            registry, mock_config_entry.entry_id
+        )
+    }
 
     assert "homeassistant" in devices
     assert "Container homeassistant" not in devices
@@ -751,17 +769,34 @@ async def test_container_update_release_notes(
     )
 
 
+GITHUB_RELEASES = "https://api.github.com/repos/home-assistant/core/releases"
+
+
+def _github_release(tag: str, body: str, *, prerelease: bool = False) -> dict:
+    """Return a release the way the GitHub API lists it."""
+    return {
+        "tag_name": tag,
+        "name": tag,
+        "body": body,
+        "html_url": f"https://github.com/home-assistant/core/releases/tag/{tag}",
+        "draft": False,
+        "prerelease": prerelease,
+    }
+
+
 async def test_container_update_without_release_notes(
     hass: HomeAssistant,
     hass_ws_client,
+    aioclient_mock: AiohttpClientMocker,
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """When Arcane finds no notes, the dialog stops offering them."""
+    """When neither Arcane nor GitHub has notes, the dialog stops offering them."""
     mock_client.async_get_release_notes.return_value = {
-        "status": "link",
+        "status": "notFound",
         "releaseUrl": "https://github.com/home-assistant/core/releases",
     }
+    aioclient_mock.get(GITHUB_RELEASES, json=[])
     await _setup(hass, mock_config_entry)
 
     reply = await _release_notes(hass, hass_ws_client)
@@ -775,42 +810,106 @@ async def test_container_update_without_release_notes(
         state.attributes["release_url"]
         == "https://github.com/home-assistant/core/releases"
     )
+
+
+async def test_github_fills_in_when_arcane_has_no_notes(
+    hass: HomeAssistant,
+    hass_ws_client,
+    aioclient_mock: AiohttpClientMocker,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The releases since the installed version are read from GitHub."""
+    mock_client.async_get_release_notes.return_value = {"status": "notFound"}
+    aioclient_mock.get(
+        GITHUB_RELEASES,
+        json=[
+            _github_release("2025.3.0b0", "Beta.", prerelease=True),
+            _github_release("2025.2.0", "Faster frontend."),
+            _github_release("2025.1.1", "Fixes."),
+            _github_release("2025.1.0", "Installed."),
+        ],
+    )
+    await _setup(hass, mock_config_entry)
+
+    for _ in range(2):
+        reply = await _release_notes(hass, hass_ws_client)
+        assert reply["result"] == (
+            "## 2025.2.0\n\nFaster frontend.\n\n## 2025.1.1\n\nFixes."
+        )
+
+    assert aioclient_mock.call_count == 1
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert state.attributes["supported_features"] & UpdateEntityFeature.RELEASE_NOTES
+    assert (
+        state.attributes["release_url"]
+        == "https://github.com/home-assistant/core/releases/tag/2025.2.0"
+    )
+
+
+async def test_github_failure_is_asked_again(
+    hass: HomeAssistant,
+    hass_ws_client,
+    aioclient_mock: AiohttpClientMocker,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """GitHub's rate limit does not leave the update without notes for good."""
+    mock_client.async_get_release_notes.return_value = {"status": "unavailable"}
+    aioclient_mock.get(GITHUB_RELEASES, status=403)
+    await _setup(hass, mock_config_entry)
+
+    for _ in range(2):
+        reply = await _release_notes(hass, hass_ws_client)
+        assert reply["result"] is None
+
+    assert aioclient_mock.call_count == 2
+    state = hass.states.get(CONTAINER_UPDATE)
+    assert state.attributes["supported_features"] & UpdateEntityFeature.RELEASE_NOTES
 
 
 async def test_release_notes_need_their_permission(
     hass: HomeAssistant,
     hass_ws_client,
+    aioclient_mock: AiohttpClientMocker,
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """A key that may not read release notes just goes without them."""
+    """A key that may not read release notes reports it and asks GitHub."""
     mock_client.async_get_release_notes.side_effect = ArcanePermissionError("nope")
+    aioclient_mock.get(
+        GITHUB_RELEASES, json=[_github_release("2025.2.0", "Faster frontend.")]
+    )
     await _setup(hass, mock_config_entry)
 
     reply = await _release_notes(hass, hass_ws_client)
-    assert reply["result"] is None
+    assert reply["result"] == "## 2025.2.0\n\nFaster frontend."
 
     coordinator = mock_config_entry.runtime_data
     assert "image-updates:read" in coordinator.missing_permissions
-    state = hass.states.get(CONTAINER_UPDATE)
-    assert not state.attributes["supported_features"] & (
-        UpdateEntityFeature.RELEASE_NOTES
-    )
 
 
-async def test_arcane_2_links_releases_without_notes(
-    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+async def test_arcane_2_reads_release_notes_from_github(
+    hass: HomeAssistant,
+    hass_ws_client,
+    aioclient_mock: AiohttpClientMocker,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Arcane 2 has no release notes, but the image labels still give a link."""
+    """Arcane 2 has no release notes, so the image's repository is read."""
     mock_client.generation = ApiGeneration.V2
+    aioclient_mock.get(
+        GITHUB_RELEASES, json=[_github_release("2025.2.0", "Faster frontend.")]
+    )
     await _setup(hass, mock_config_entry)
 
     state = hass.states.get(CONTAINER_UPDATE)
-    assert not state.attributes["supported_features"] & (
-        UpdateEntityFeature.RELEASE_NOTES
-    )
+    assert state.attributes["supported_features"] & UpdateEntityFeature.RELEASE_NOTES
     assert (
         state.attributes["release_url"]
         == "https://github.com/home-assistant/core/releases"
     )
+
+    reply = await _release_notes(hass, hass_ws_client)
+    assert reply["result"] == "## 2025.2.0\n\nFaster frontend."
     mock_client.async_get_release_notes.assert_not_awaited()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.update import (
@@ -12,12 +13,14 @@ from homeassistant.components.update import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ArcaneConfigEntry
 from .api import ApiGeneration, ArcaneError, ArcanePermissionError
 from .const import CONF_ALLOW_CONTROL, CONF_UPDATE_ENTITIES, DOMAIN, MANUFACTURER
 from .entity import ArcaneContainerEntity, ArcaneEnvironmentEntity
+from .github import GitHubError, ImageUpdate, async_release_notes
 from .helpers import action_error, async_setup_entities
 from .models import ArcaneVersion, image_name
 from .permissions import (
@@ -80,6 +83,19 @@ def _summary(notes: str | None) -> str | None:
     return f"{text[: MAX_RELEASE_SUMMARY - 1].rstrip()}…"
 
 
+@dataclass(frozen=True, slots=True)
+class _Notes:
+    """What was found about the release notes of one pending update."""
+
+    notes: str | None
+    url: str | None
+
+
+def _text(value: Any) -> str | None:
+    """Return a non-empty string from an API reply, or None."""
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     """Report and install a newer image for a container.
 
@@ -90,8 +106,11 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     file. A redeploy would only pull the pinned tag again.
 
     Release notes come from Arcane 3, which looks up the GitHub release of the
-    target version from the image labels. They are only fetched when the
-    update dialog asks for them, and kept per target version.
+    target version from the image labels. When it has none, for example for a
+    new image of ``latest`` that names no version, or on Arcane 2, the
+    releases of the GitHub repository the labels name are read directly. They
+    are only fetched when the update dialog asks for them, and kept per target
+    version.
     """
 
     def __init__(
@@ -104,7 +123,7 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
         """Initialize the update entity."""
         super().__init__(coordinator, environment_id, container_name, description)
         self._notes_target: tuple[str, str | None, str | None] | None = None
-        self._notes: dict[str, Any] = {}
+        self._notes = _Notes(None, None)
 
     @property
     def _target(self) -> tuple[str, str | None, str | None] | None:
@@ -115,25 +134,30 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
         return container.image, container.update_version, container.update_digest
 
     @property
-    def _cached_notes(self) -> dict[str, Any] | None:
-        """Return the release notes fetched for the pending update, if any."""
+    def _cached_notes(self) -> _Notes | None:
+        """Return what was found for the pending update, if it was looked up."""
         target = self._target
         if target is None or target != self._notes_target:
             return None
         return self._notes
 
     @property
+    def _asks_arcane(self) -> bool:
+        """Return whether Arcane can be asked for release notes."""
+        return (
+            self.coordinator.client.generation is ApiGeneration.V3
+            and PERM_IMAGE_UPDATES_READ not in self.coordinator.missing_permissions
+        )
+
+    @property
     def _offers_release_notes(self) -> bool:
         """Return whether release notes may exist for the pending update."""
-        if (
-            self._target is None
-            or self.coordinator.client.generation is not ApiGeneration.V3
-            or PERM_IMAGE_UPDATES_READ in self.coordinator.missing_permissions
-        ):
+        if self._target is None or (container := self.container) is None:
             return False
-        # Once Arcane said it has no notes for this target, stop offering them.
-        cached = self._cached_notes
-        return cached is None or bool(cached.get("notes"))
+        # Once nothing was found for this target, stop offering notes.
+        if (cached := self._cached_notes) is not None:
+            return cached.notes is not None
+        return self._asks_arcane or container.source_repository is not None
 
     @property
     def supported_features(self) -> UpdateEntityFeature:
@@ -148,9 +172,8 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
     @property
     def release_url(self) -> str | None:
         """Return the release page of the update, or the image's releases."""
-        cached = self._cached_notes or {}
-        if (url := cached.get("releaseUrl")) and isinstance(url, str):
-            return url
+        if (cached := self._cached_notes) is not None and cached.url:
+            return cached.url
         container = self.container
         return container.release_link if container else None
 
@@ -159,25 +182,73 @@ class ArcaneContainerUpdate(ArcaneContainerEntity, UpdateEntity):
         if (target := self._target) is None or not self._offers_release_notes:
             return None
         if (cached := self._cached_notes) is not None:
-            return cached.get("notes") or None
-        image, version, digest = target
-        try:
-            notes = await self.coordinator.client.async_get_release_notes(
-                self.environment_id, image, version=version, digest=digest
-            )
-        except ArcanePermissionError:
-            self.coordinator.async_note_denied(PERM_IMAGE_UPDATES_READ)
-            self.async_write_ha_state()
-            return None
-        except ArcaneError as err:
-            # Not kept, so the next time the dialog opens asks again.
-            _LOGGER.debug("No release notes for %s: %s", image, err)
-            return None
-        self._notes_target, self._notes = target, notes
+            return cached.notes
+        found, complete = await self._async_look_up_notes()
+        if found.notes is not None or complete:
+            # Kept, so the dialog opening again asks nobody. A lookup that
+            # failed on the way is not, so the next one tries again.
+            self._notes_target, self._notes = target, found
         # The release link and whether notes are offered may have changed.
         self.async_write_ha_state()
-        text = notes.get("notes")
-        return text.strip() if isinstance(text, str) and text.strip() else None
+        return found.notes
+
+    async def _async_look_up_notes(self) -> tuple[_Notes, bool]:
+        """Ask Arcane, then GitHub, for the notes of the pending update.
+
+        Returns what was found, and whether every source asked answered.
+        """
+        container = self.container
+        assert container is not None
+        image, version = container.image, container.update_version
+        complete = True
+        fallback_url: str | None = None
+        if self._asks_arcane:
+            try:
+                reply = await self.coordinator.client.async_get_release_notes(
+                    self.environment_id,
+                    image,
+                    version=version,
+                    digest=container.update_digest,
+                )
+            except ArcanePermissionError:
+                self.coordinator.async_note_denied(PERM_IMAGE_UPDATES_READ)
+                reply = {}
+            except ArcaneError as err:
+                _LOGGER.debug("Arcane has no release notes for %s: %s", image, err)
+                reply, complete = {}, False
+            if notes := _text(reply.get("notes")):
+                return _Notes(notes, _text(reply.get("releaseUrl"))), True
+            # Arcane may have read the version from the labels of the new
+            # image even though it found no release for it.
+            version = version or _text(reply.get("version"))
+            fallback_url = _text(reply.get("releaseUrl"))
+
+        if (repository := container.source_repository) is None:
+            return _Notes(None, fallback_url), complete
+        try:
+            found = await async_release_notes(
+                async_get_clientsession(self.hass),
+                repository,
+                ImageUpdate(
+                    image=(image_name(image) or image).rpartition("/")[2],
+                    tag=container.tag,
+                    version=version,
+                    # The labels name the installed version even for a moving
+                    # tag; a tag update also knows the tag it replaces.
+                    installed=container.image_version
+                    or (
+                        container.installed_version
+                        if container.update_version
+                        else None
+                    ),
+                ),
+            )
+        except GitHubError as err:
+            _LOGGER.debug("No release notes on GitHub for %s: %s", image, err)
+            return _Notes(None, fallback_url), False
+        if found is None:
+            return _Notes(None, fallback_url), complete
+        return _Notes(found.notes, found.url), True
 
     @property
     def title(self) -> str | None:

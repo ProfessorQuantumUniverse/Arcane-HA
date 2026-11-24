@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title desc">
+  <title id="title">How the integration works</title>
+  <desc id="desc">Home Assistant polls Arcane over its REST API and sends actions to it. Arcane manages the Docker hosts, local and remote. Release notes come from GitHub, through Arcane or directly.</desc>
+  <style>
+    .card { fill: #ffffff; stroke: #d0d7de; stroke-width: 1.5; }
+    .host { fill: #f6f8fa; stroke: #d0d7de; stroke-width: 1.5; }
+    .chip { fill: #eef1f4; }
+    .title { font: 600 20px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .text { font: 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .muted { font: 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
+    .label { font: 600 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; letter-spacing: 0.04em; }
+    .mono { font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; fill: #59636e; }
+    .line { stroke: #8c959f; stroke-width: 2; fill: none; }
+    .dash { stroke: #8c959f; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    .head { fill: #8c959f; }
+    .ha { fill: #18a3e0; }
+    .arcane { fill: #6d28d9; }
+    .ok { fill: #1a7f37; }
+    .warn { fill: #bf8700; }
+    .off { fill: #8c959f; }
+    @media (prefers-color-scheme: dark) {
+      .card { fill: #161b22; stroke: #30363d; }
+      .host { fill: #0d1117; stroke: #30363d; }
+      .chip { fill: #21262d; }
+      .title, .text { fill: #e6edf3; }
+      .muted, .label, .mono { fill: #9198a1; }
+      .line, .dash { stroke: #6e7681; }
+      .head { fill: #6e7681; }
+      .arcane { fill: #8b5cf6; }
+      .ok { fill: #3fb950; }
+      .warn { fill: #d29922; }
+    }
+  </style>
+  <defs>
+    <clipPath id="ha-card"><rect x="16" y="16" width="290" height="300" rx="14"/></clipPath>
+    <clipPath id="arcane-card"><rect x="390" y="16" width="250" height="300" rx="14"/></clipPath>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" class="head"/>
+    </marker>
+  </defs>
+
+  <!-- Home Assistant -->
+  <rect class="card" x="16" y="16" width="290" height="300" rx="14"/>
+  <rect class="ha" x="16" y="16" width="290" height="6" clip-path="url(#ha-card)"/>
+  <text class="label" x="36" y="54">HOME ASSISTANT</text>
+  <text class="title" x="36" y="82">Devices and entities</text>
+  <g class="text">
+    <text x="36" y="122">Switches to start and stop</text>
+    <text x="36" y="158">Restart and redeploy buttons</text>
+    <text x="36" y="194">Sensors for state and counts</text>
+    <text x="36" y="230">Updates under Settings</text>
+    <text x="36" y="266">Events for automations</text>
+  </g>
+  <circle class="ha" cx="286" cy="117" r="4"/>
+  <circle class="ha" cx="286" cy="153" r="4"/>
+  <circle class="ha" cx="286" cy="189" r="4"/>
+  <circle class="ha" cx="286" cy="225" r="4"/>
+  <circle class="ha" cx="286" cy="261" r="4"/>
+
+  <!-- Arrows HA to Arcane -->
+  <path class="line" d="M314 120 H 382" marker-end="url(#arrow)"/>
+  <text class="muted" x="348" y="104" text-anchor="middle">polls, acts</text>
+  <path class="line" d="M382 212 H 314" marker-end="url(#arrow)"/>
+  <text class="muted" x="348" y="236" text-anchor="middle">state, updates</text>
+  <text class="mono" x="348" y="170" text-anchor="middle">X-Api-Key</text>
+
+  <!-- Arcane -->
+  <rect class="card" x="390" y="16" width="250" height="300" rx="14"/>
+  <rect class="arcane" x="390" y="16" width="250" height="6" clip-path="url(#arcane-card)"/>
+  <text class="label" x="410" y="54">ARCANE</text>
+  <text class="title" x="410" y="82">Docker manager</text>
+  <g class="text">
+    <text x="410" y="122">REST API, version 2 or 3</text>
+    <text x="410" y="158">Image update checks</text>
+    <text x="410" y="194">Its own updater</text>
+    <text x="410" y="230">Environments and agents</text>
+    <text x="410" y="266">Release notes on 3.x</text>
+  </g>
+  <circle class="arcane" cx="620" cy="117" r="4"/>
+  <circle class="arcane" cx="620" cy="153" r="4"/>
+  <circle class="arcane" cx="620" cy="189" r="4"/>
+  <circle class="arcane" cx="620" cy="225" r="4"/>
+  <circle class="arcane" cx="620" cy="261" r="4"/>
+
+  <!-- Arrows Arcane to hosts -->
+  <path class="line" d="M648 86 H 700" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <path class="line" d="M648 246 H 700" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+
+  <!-- Hosts -->
+  <rect class="host" x="708" y="16" width="236" height="140" rx="14"/>
+  <text class="label" x="728" y="48">ENVIRONMENT</text>
+  <text class="title" x="728" y="76">Local Docker</text>
+  <rect class="chip" x="728" y="92" width="62" height="44" rx="8"/>
+  <rect class="chip" x="798" y="92" width="62" height="44" rx="8"/>
+  <rect class="chip" x="868" y="92" width="62" height="44" rx="8"/>
+  <circle class="ok" cx="742" cy="106" r="5"/>
+  <circle class="ok" cx="812" cy="106" r="5"/>
+  <circle class="warn" cx="882" cy="106" r="5"/>
+  <rect class="off" x="736" y="120" width="44" height="5" rx="2.5" opacity="0.45"/>
+  <rect class="off" x="806" y="120" width="44" height="5" rx="2.5" opacity="0.45"/>
+  <rect class="off" x="876" y="120" width="44" height="5" rx="2.5" opacity="0.45"/>
+
+  <rect class="host" x="708" y="176" width="236" height="140" rx="14"/>
+  <text class="label" x="728" y="208">ENVIRONMENT</text>
+  <text class="title" x="728" y="236">Remote agent</text>
+  <rect class="chip" x="728" y="252" width="62" height="44" rx="8"/>
+  <rect class="chip" x="798" y="252" width="62" height="44" rx="8"/>
+  <circle class="ok" cx="742" cy="266" r="5"/>
+  <circle class="off" cx="812" cy="266" r="5"/>
+  <rect class="off" x="736" y="280" width="44" height="5" rx="2.5" opacity="0.45"/>
+  <rect class="off" x="806" y="280" width="44" height="5" rx="2.5" opacity="0.45"/>
+
+  <!-- GitHub -->
+  <rect class="host" x="180" y="352" width="360" height="52" rx="12"/>
+  <text class="text" x="360" y="383" text-anchor="middle">GitHub releases of the image</text>
+  <path class="dash" d="M515 324 V 344" marker-end="url(#arrow)"/>
+  <path class="dash" d="M205 324 V 344" marker-end="url(#arrow)"/>
+  <text class="muted" x="525" y="340">release notes</text>
+  <text class="muted" x="62" y="340">when Arcane has none</text>
+</svg>

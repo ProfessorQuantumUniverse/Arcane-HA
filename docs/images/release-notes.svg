@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="236" viewBox="0 0 960 236" role="img" aria-labelledby="title desc">
+  <title id="title">Where the release notes of a container update come from</title>
+  <desc id="desc">Opening a container update asks Arcane 3 for the release of the version it installs. When Arcane has none, or on Arcane 2, the integration reads the releases of the GitHub repository the image labels name and shows every release since the installed version.</desc>
+  <style>
+    .card { fill: #ffffff; stroke: #d0d7de; stroke-width: 1.5; }
+    .done { fill: #f5f0ff; stroke: #6d28d9; stroke-width: 1.5; }
+    .step { font: 600 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #6d28d9; letter-spacing: 0.06em; }
+    .title { font: 600 17px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .text { font: 14px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
+    .mono { font: 12.5px ui-monospace, SFMono-Regular, Consolas, monospace; fill: #59636e; }
+    .line { stroke: #8c959f; stroke-width: 2; fill: none; }
+    .dash { stroke: #8c959f; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    .head { fill: #8c959f; }
+    .small { font: 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
+    @media (prefers-color-scheme: dark) {
+      .card { fill: #161b22; stroke: #30363d; }
+      .done { fill: #1e1533; stroke: #8b5cf6; }
+      .step { fill: #a78bfa; }
+      .title { fill: #e6edf3; }
+      .text, .mono, .small { fill: #9198a1; }
+      .line, .dash { stroke: #6e7681; }
+      .head { fill: #6e7681; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" class="head"/>
+    </marker>
+  </defs>
+
+  <rect class="card" x="16" y="16" width="208" height="150" rx="14"/>
+  <text class="step" x="36" y="48">1 · YOU</text>
+  <text class="title" x="36" y="76">Open the update</text>
+  <text class="text" x="36" y="104">Settings, Updates, or</text>
+  <text class="text" x="36" y="124">the container's update</text>
+  <text class="text" x="36" y="144">entity</text>
+
+  <path class="line" d="M230 91 H 254" marker-end="url(#arrow)"/>
+
+  <rect class="card" x="262" y="16" width="208" height="150" rx="14"/>
+  <text class="step" x="282" y="48">2 · ARCANE 3</text>
+  <text class="title" x="282" y="76">Release of the</text>
+  <text class="title" x="282" y="98">target version</text>
+  <text class="text" x="282" y="126">found from the image</text>
+  <text class="text" x="282" y="146">labels, with its token</text>
+
+  <path class="line" d="M476 91 H 500" marker-end="url(#arrow)"/>
+
+  <rect class="card" x="508" y="16" width="208" height="150" rx="14"/>
+  <text class="step" x="528" y="48">3 · ELSE GITHUB</text>
+  <text class="title" x="528" y="76">Releases of the</text>
+  <text class="title" x="528" y="98">image's repository</text>
+  <text class="mono" x="528" y="126">org.opencontainers</text>
+  <text class="mono" x="528" y="146">.image.source</text>
+
+  <path class="line" d="M722 91 H 746" marker-end="url(#arrow)"/>
+
+  <rect class="done" x="754" y="16" width="190" height="150" rx="14"/>
+  <text class="step" x="774" y="48">4 · DIALOG</text>
+  <text class="title" x="774" y="76">Every release</text>
+  <text class="title" x="774" y="98">since installed</text>
+  <text class="text" x="774" y="126">with a link to the</text>
+  <text class="text" x="774" y="146">newest one</text>
+
+  <path class="dash" d="M366 172 V 196 H 849 V 174" marker-end="url(#arrow)"/>
+  <text class="small" x="608" y="220" text-anchor="middle">found: shown right away, and kept for this version</text>
+</svg>

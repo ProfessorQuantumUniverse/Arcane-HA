@@ -34,16 +34,17 @@ _SOURCE_LABELS = (
     "org.opencontainers.image.url",
     "org.opencontainers.image.documentation",
 )
+_VERSION_LABEL = "org.opencontainers.image.version"
 _GITHUB_HOSTS = ("github.com", "www.github.com")
 _GITHUB_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 _GITHUB_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 
 
-def github_releases_url(source: str | None) -> str | None:
-    """Return the GitHub releases page of a repository URL, if it is one.
+def github_repository(source: str | None) -> str | None:
+    """Return ``owner/repo`` of a GitHub repository URL, if it is one.
 
     The labels are set by whoever built the image, so only a plain GitHub
-    repository address is turned into a link, never an arbitrary URL.
+    repository address is accepted, never an arbitrary URL.
     """
     if not source:
         return None
@@ -62,15 +63,22 @@ def github_releases_url(source: str | None) -> str | None:
             return None
     if not _GITHUB_OWNER.match(owner) or not _GITHUB_REPO.match(repo):
         return None
-    return f"https://github.com/{owner}/{repo}/releases"
+    return f"{owner}/{repo}"
 
 
-def _release_link(labels: dict[str, Any]) -> str | None:
-    """Return the first GitHub releases page the image labels point at."""
+def github_releases_url(source: str | None) -> str | None:
+    """Return the GitHub releases page of a repository URL, if it is one."""
+    if (repository := github_repository(source)) is None:
+        return None
+    return f"https://github.com/{repository}/releases"
+
+
+def _source_repository(labels: dict[str, Any]) -> str | None:
+    """Return the first GitHub repository the image labels point at."""
     for label in _SOURCE_LABELS:
         value = labels.get(label)
-        if isinstance(value, str) and (link := github_releases_url(value)):
-            return link
+        if isinstance(value, str) and (repository := github_repository(value)):
+            return repository
     return None
 
 
@@ -194,7 +202,23 @@ class ArcaneContainer:
     # notes are looked up for exactly that version or digest.
     update_version: str | None = None
     update_digest: str | None = None
-    release_link: str | None = None
+    # The GitHub repository the image is built from, as ``owner/repo``, and
+    # the version the image labels name, both from the OCI labels Docker
+    # copies onto the container.
+    source_repository: str | None = None
+    image_version: str | None = None
+
+    @property
+    def release_link(self) -> str | None:
+        """Return the GitHub releases page of the image, if it names one."""
+        if self.source_repository is None:
+            return None
+        return f"https://github.com/{self.source_repository}/releases"
+
+    @property
+    def tag(self) -> str | None:
+        """Return the tag the container runs."""
+        return _image_tag(self.image)
 
     @property
     def is_running(self) -> bool:
@@ -238,7 +262,8 @@ class ArcaneContainer:
                 else None
             ),
             update_digest=_version(update_info.get("latestDigest")),
-            release_link=_release_link(labels),
+            source_repository=_source_repository(labels),
+            image_version=_version(labels.get(_VERSION_LABEL)),
         )
 
 

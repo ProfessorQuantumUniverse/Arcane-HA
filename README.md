@@ -1,55 +1,69 @@
-<img src="brands/icon.png" alt="" width="120" align="left" hspace="18" vspace="6">
+<p align="center">
+  <img src="docs/images/banner.svg" alt="Arcane for Home Assistant" width="100%">
+</p>
 
-# Arcane for Home Assistant
-
-Watch and control your Docker containers and Compose projects from Home Assistant,
-through [Arcane](https://github.com/getarcaneapp/arcane).
-
-<br clear="left">
-
-[![HACS](https://img.shields.io/badge/HACS-custom-41BDF5.svg)](https://hacs.xyz)
-[![Release](https://img.shields.io/github/v/release/ProfessorQuantumUniverse/Arcane-HA?display_name=tag&sort=semver)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/releases)
-[![Validate](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml)
-[![Tests](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml/badge.svg)](https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml)
+<p align="center">
+  <a href="https://hacs.xyz"><img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg?logo=homeassistantcommunitystore&logoColor=white" alt="HACS Default"></a>
+  <a href="https://github.com/ProfessorQuantumUniverse/Arcane-HA/releases"><img src="https://img.shields.io/github/v/release/ProfessorQuantumUniverse/Arcane-HA?display_name=tag&sort=semver&color=6d28d9" alt="Release"></a>
+  <a href="https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml"><img src="https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
+  <a href="https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml"><img src="https://github.com/ProfessorQuantumUniverse/Arcane-HA/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ProfessorQuantumUniverse/Arcane-HA" alt="License"></a>
+</p>
 
 <!-- INSTALL BUTTONS START -->
 <p align="center">
-  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=ProfessorQuantumUniverse&repository=Arcane-HA&category=integration"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open your Home Assistant instance and open this repository in HACS" height="48"></a>
   <a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=arcane"><img src="https://my.home-assistant.io/badges/config_flow_start.svg" alt="Open your Home Assistant instance and start setting up Arcane" height="48"></a>
 </p>
 <!-- INSTALL BUTTONS END -->
 
-You get a device per Arcane environment, per container and per Compose project, with
-switches to start and stop them, buttons to restart and redeploy, sensors for the state
-and the counts, and update entities that appear under **Settings > Updates** when a
-newer image is waiting.
+Watch and control your Docker containers and Compose projects from Home Assistant,
+through [Arcane](https://github.com/getarcaneapp/arcane), the modern Docker management
+UI.
 
-## Requirements
+- **Devices** for every Arcane environment, Compose project and container, nested the
+  way your stacks are.
+- **Control**: switches to start and stop, buttons to restart and redeploy, and pruning
+  of unused images.
+- **Updates** under **Settings > Updates**, installed through Arcane's own updater, with
+  the release notes of what you are about to install.
+- **Automations** on crashes, out of memory kills, health changes and project state.
+- **Arcane 2 and 3**, local and remote environments, found out on their own.
 
-Home Assistant 2025.2 or newer, an Arcane 2 or Arcane 3 instance it can reach, and an
-Arcane API key. Which of the two API versions an instance speaks is found out on its
-own, also after you upgrade Arcane.
+## How it works
+
+<p align="center">
+  <img src="docs/images/how-it-works.svg" alt="Home Assistant polls Arcane and sends actions to it, Arcane manages the Docker hosts, release notes come from GitHub" width="100%">
+</p>
+
+The integration talks to Arcane only, never to Docker directly. It polls Arcane's REST
+API with an API key, every 30 seconds by default, and sends actions the same way.
+Arcane does the work on the host, also on remote agents, so everything Arcane manages
+shows up in Home Assistant.
 
 ## Install
 
-**HACS:** click the **Open in HACS** button above, or open the three dot menu, choose **Custom repositories**, add
-`https://github.com/ProfessorQuantumUniverse/Arcane-HA` with category **Integration**,
-install **Arcane** and restart.
+You need Home Assistant 2025.2 or newer, an Arcane 2 or Arcane 3 instance it can reach,
+and an Arcane API key.
 
-**By hand:** copy `custom_components/arcane` into your `config/custom_components/` and
-restart.
+**HACS (recommended).** Arcane is in the HACS default store. Open HACS, search for
+**Arcane**, download it and restart Home Assistant.
+
+**By hand.** Copy `custom_components/arcane` from the
+[latest release](https://github.com/ProfessorQuantumUniverse/Arcane-HA/releases/latest)
+into your `config/custom_components/` and restart.
 
 ## Set up
 
 1. In Arcane, create an API key under **Settings > API keys**.
 2. In Home Assistant, go to **Settings > Devices & services > Add integration** and pick
-   **Arcane**.
+   **Arcane**, or use the **Add integration** button above.
 3. Enter the address of your instance, for example `http://192.168.1.10:3552`, and the
    key.
 
 Use the address Arcane is actually served on. Redirects are deliberately not followed, so
 the API key is never handed to another host. If setup complains about a redirect, use the
-address it points at.
+address it points at. Whether the instance speaks the Arcane 2 or the Arcane 3 API is
+found out on its own, also after you upgrade Arcane.
 
 ### API key permissions
 
@@ -58,21 +72,34 @@ The integration works out what your setup needs and tells you: open it and choos
 **Settings > Roles** in Arcane. Turning an option off drops its permissions from the
 list.
 
-Monitoring needs `environments:list`, `containers:list`, `projects:list`, `images:list`,
-`volumes:list`, `networks:list` and `system:read`. Controlling things adds
-`containers:start`, `containers:stop`, `containers:restart`, `projects:deploy`,
-`projects:down` and `projects:restart`. Installing container updates needs
-`image-updates:apply` on Arcane 3 and `image-updates:check` on Arcane 2, and their
-release notes `image-updates:read` on Arcane 3. The redeploy
-buttons need `containers:redeploy`, pruning needs `system:prune` and upgrading Arcane
-itself needs `system:upgrade`.
-
 Only `environments:list` is required. A key without the rest still sets up; the parts it
 cannot reach stay empty and actions fail with an error naming the permission. Whenever
 Arcane refuses a call, the permission lands in a repair under
 **Settings > System > Repairs**, so a key that is too narrow says so.
 
-## Entities
+<details>
+<summary>Every permission and what it is for</summary>
+
+| For | Permissions |
+| --- | --- |
+| Monitoring | `environments:list`, `containers:list`, `projects:list`, `images:list`, `volumes:list`, `networks:list`, `system:read` |
+| Control | `containers:start`, `containers:stop`, `containers:restart`, `projects:deploy`, `projects:down`, `projects:restart` |
+| Installing container updates | `image-updates:apply` on Arcane 3, `image-updates:check` on Arcane 2 |
+| Release notes from Arcane | `image-updates:read`, Arcane 3 only |
+| Redeploy buttons | `containers:redeploy` |
+| Prune button | `system:prune` |
+| Upgrading Arcane itself | `system:upgrade` |
+
+</details>
+
+## Devices and entities
+
+<p align="center">
+  <img src="docs/images/devices.svg" alt="An environment device with a Compose project below it, the containers of the project below that, and a standalone container directly below the environment" width="100%">
+</p>
+
+Containers appear as child devices of their Compose project, and containers and projects
+that come and go in Arcane are added and removed while Home Assistant keeps running.
 
 ### Environment
 
@@ -114,9 +141,6 @@ Arcane refuses a call, the permission lands in a repair under
 | Restart | button | |
 | Redeploy | button | Off by default |
 
-Containers appear as child devices of their Compose project, and containers and projects
-that come and go in Arcane are added and removed while Home Assistant keeps running.
-
 ## Options
 
 Open the integration and choose **Configure**.
@@ -149,10 +173,15 @@ runs Arcane's own updater, the same as the update action in the Arcane UI. Insta
 the Arcane update asks Arcane to pull its own newer image and restart, so everything
 here goes unavailable for a moment.
 
-**Images pinned to a version.** What counts as an update is Arcane's call. By default
-Arcane watches the tag a container runs for a new digest, which is how `latest` and
-other moving tags are updated. For an image pinned to a version such as `1.2.3`, tell
-Arcane to follow versions with a label on the service:
+An entity only appears in that panel while it has an update and can install it, so with
+control turned off the entities still report versions but stay out of the way.
+
+### Images pinned to a version
+
+What counts as an update is Arcane's call. By default Arcane watches the tag a container
+runs for a new digest, which is how `latest` and other moving tags are updated. For an
+image pinned to a version such as `1.2.3`, tell Arcane to follow versions with a label on
+the service:
 
 ```yaml
 services:
@@ -167,17 +196,30 @@ services:
 Arcane then reports `1.3.0` as the update, and installing it writes the new tag into the
 compose file and recreates the container on it.
 
-**Release notes.** On Arcane 3 the update dialog of a container shows the release notes
-of the version it installs. Arcane looks them up on GitHub from the
-`org.opencontainers.image.source` label of the image, so they appear for images that
-carry that label and publish GitHub releases. Set a GitHub token in Arcane if you have
-many such images, or GitHub's limit for anonymous requests runs out. A digest update of
-a moving tag usually has no release to match, and official Docker Hub images such as
-`nginx` name no source, so those show none. Either way, every container update links to
-its release or to the releases page of the image's repository, on Arcane 2 as well.
+### Release notes
 
-An entity only appears in that panel while it has an update and can install it, so with
-control turned off the entities still report versions but stay out of the way.
+<p align="center">
+  <img src="docs/images/release-notes.svg" alt="Opening an update asks Arcane 3 for the release notes first and GitHub second, and shows every release since the installed version" width="100%">
+</p>
+
+The update dialog of a container shows the release notes of what it installs. They are
+only fetched when you open the dialog, and kept for that version.
+
+1. **Arcane 3** is asked first. It looks the release up on GitHub from the
+   `org.opencontainers.image.source` label of the image, with the GitHub token set in
+   Arcane if there is one.
+2. When Arcane has nothing, which happens for a new image of `latest` that names no
+   version, and always on Arcane 2, the integration reads the releases of that
+   repository itself.
+3. An update that skips versions shows every release in between, from the installed
+   version up. A new image of a moving tag gets the newest release the tag follows:
+   `latest` or `stable` the newest stable release, `2` or `1.4` the newest one of that
+   line. The dialog says when the notes are matched that way.
+
+Images that name no GitHub repository in their labels, such as official Docker Hub
+images like `nginx`, have no release notes. GitHub allows 60 anonymous requests per
+hour, which is plenty for opening update dialogs. Every container update also links to
+its release, or to the releases page of the repository.
 
 ## Events
 
@@ -224,7 +266,8 @@ redacted from diagnostics. Only `http://` and `https://` addresses are accepted,
 addresses carrying credentials are rejected because they end up in log lines. Redirects
 are not followed. You can switch certificate verification off for a self signed
 certificate, but Home Assistant will warn at startup, so prefer a trusted certificate or
-plain HTTP on a network you control.
+plain HTTP on a network you control. The only other host the integration talks to is
+`api.github.com`, without credentials, for release notes.
 
 **Behaviour.** Every selected environment is polled, remote agents included; one that is
 unreachable reports as offline instead of failing the whole update. Container entities
@@ -240,6 +283,9 @@ python -m venv .venv
 .venv/bin/pip install -r requirements_test.txt
 .venv/bin/python -m pytest
 ```
+
+Home Assistant's test harness needs Linux or macOS; on Windows, run the tests in WSL or
+a `python:3.13` container.
 
 ### Releasing
 

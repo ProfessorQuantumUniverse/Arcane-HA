@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="392" viewBox="0 0 960 392" role="img" aria-labelledby="title desc">
+  <title id="title">Devices the integration creates</title>
+  <desc id="desc">An environment device, a Compose project below it, the containers of that project below the project, and a container outside any project directly below the environment. Each device carries its entities.</desc>
+  <style>
+    .card { fill: #ffffff; stroke: #d0d7de; stroke-width: 1.5; }
+    .chip { fill: #eef1f4; }
+    .name { font: 600 17px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .chiptext { font: 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .kind { font: 600 11px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #ffffff; letter-spacing: 0.06em; }
+    .tree { stroke: #8c959f; stroke-width: 2; fill: none; }
+    .env { fill: #6d28d9; }
+    .project { fill: #b35900; }
+    .container { fill: #0f7fb3; }
+    .ok { fill: #1a7f37; }
+    .warn { fill: #bf8700; }
+    .off { fill: #8c959f; }
+    @media (prefers-color-scheme: dark) {
+      .card { fill: #161b22; stroke: #30363d; }
+      .chip { fill: #21262d; }
+      .name, .chiptext { fill: #e6edf3; }
+      .tree { stroke: #6e7681; }
+      .env { fill: #7c3aed; }
+      .project { fill: #b35900; }
+      .container { fill: #0b6e9c; }
+      .ok { fill: #3fb950; }
+      .warn { fill: #d29922; }
+    }
+  </style>
+
+  <!-- Tree lines -->
+  <path class="tree" d="M44 70 V 329 H 76"/>
+  <path class="tree" d="M44 113 H 76"/>
+  <path class="tree" d="M104 142 V 257 H 136"/>
+  <path class="tree" d="M104 185 H 136"/>
+
+  <!-- Environment -->
+  <rect class="card" x="16" y="12" width="928" height="58" rx="12"/>
+  <rect class="env" x="32" y="29" width="118" height="24" rx="12"/>
+  <text class="kind" x="91" y="45" text-anchor="middle">ENVIRONMENT</text>
+  <text class="name" x="166" y="47">Local</text>
+  <g class="chiptext">
+    <rect class="chip" x="400" y="26" width="82" height="30" rx="15"/>
+    <circle class="ok" cx="417" cy="41" r="5"/>
+    <text x="429" y="46">Online</text>
+    <rect class="chip" x="490" y="26" width="124" height="30" rx="15"/>
+    <text x="552" y="46" text-anchor="middle">Containers 12</text>
+    <rect class="chip" x="622" y="26" width="104" height="30" rx="15"/>
+    <text x="674" y="46" text-anchor="middle">Updates 2</text>
+    <rect class="chip" x="734" y="26" width="194" height="30" rx="15"/>
+    <circle class="warn" cx="751" cy="41" r="5"/>
+    <text x="763" y="46">Arcane update ready</text>
+  </g>
+
+  <!-- Compose project -->
+  <rect class="card" x="76" y="84" width="868" height="58" rx="12"/>
+  <rect class="project" x="92" y="101" width="138" height="24" rx="12"/>
+  <text class="kind" x="161" y="117" text-anchor="middle">COMPOSE PROJECT</text>
+  <text class="name" x="246" y="119">smarthome</text>
+  <g class="chiptext">
+    <rect class="chip" x="490" y="98" width="124" height="30" rx="15"/>
+    <circle class="ok" cx="507" cy="113" r="5"/>
+    <text x="519" y="118">Running</text>
+    <rect class="chip" x="622" y="98" width="104" height="30" rx="15"/>
+    <text x="674" y="118" text-anchor="middle">Services 2/2</text>
+    <rect class="chip" x="734" y="98" width="94" height="30" rx="15"/>
+    <text x="781" y="118" text-anchor="middle">Restart</text>
+    <rect class="chip" x="836" y="98" width="92" height="30" rx="15"/>
+    <text x="882" y="118" text-anchor="middle">Redeploy</text>
+  </g>
+
+  <!-- Containers of the project -->
+  <rect class="card" x="136" y="156" width="808" height="58" rx="12"/>
+  <rect class="container" x="152" y="173" width="104" height="24" rx="12"/>
+  <text class="kind" x="204" y="189" text-anchor="middle">CONTAINER</text>
+  <text class="name" x="272" y="191">homeassistant</text>
+  <g class="chiptext">
+    <rect class="chip" x="490" y="170" width="124" height="30" rx="15"/>
+    <circle class="ok" cx="507" cy="185" r="5"/>
+    <text x="519" y="190">Running</text>
+    <rect class="chip" x="622" y="170" width="104" height="30" rx="15"/>
+    <circle class="ok" cx="639" cy="185" r="5"/>
+    <text x="651" y="190">Healthy</text>
+    <rect class="chip" x="734" y="170" width="194" height="30" rx="15"/>
+    <circle class="warn" cx="751" cy="185" r="5"/>
+    <text x="763" y="190">2025.1.0 to 2025.2.0</text>
+  </g>
+
+  <rect class="card" x="136" y="228" width="808" height="58" rx="12"/>
+  <rect class="container" x="152" y="245" width="104" height="24" rx="12"/>
+  <text class="kind" x="204" y="261" text-anchor="middle">CONTAINER</text>
+  <text class="name" x="272" y="263">mosquitto</text>
+  <g class="chiptext">
+    <rect class="chip" x="490" y="242" width="124" height="30" rx="15"/>
+    <circle class="ok" cx="507" cy="257" r="5"/>
+    <text x="519" y="262">Running</text>
+    <rect class="chip" x="622" y="242" width="104" height="30" rx="15"/>
+    <text x="674" y="262" text-anchor="middle">Restart</text>
+    <rect class="chip" x="734" y="242" width="194" height="30" rx="15"/>
+    <text x="831" y="262" text-anchor="middle">Up to date</text>
+  </g>
+
+  <!-- Container outside any project -->
+  <rect class="card" x="76" y="300" width="868" height="58" rx="12"/>
+  <rect class="container" x="92" y="317" width="104" height="24" rx="12"/>
+  <text class="kind" x="144" y="333" text-anchor="middle">CONTAINER</text>
+  <text class="name" x="212" y="335">whoami</text>
+  <g class="chiptext">
+    <rect class="chip" x="490" y="314" width="124" height="30" rx="15"/>
+    <circle class="off" cx="507" cy="329" r="5"/>
+    <text x="519" y="334">Exited (0)</text>
+    <rect class="chip" x="622" y="314" width="104" height="30" rx="15"/>
+    <text x="674" y="334" text-anchor="middle">Restart</text>
+    <rect class="chip" x="734" y="314" width="194" height="30" rx="15"/>
+    <circle class="warn" cx="751" cy="329" r="5"/>
+    <text x="763" y="334">New image of latest</text>
+  </g>
+  <text class="chiptext" x="480" y="384" text-anchor="middle" opacity="0.7">Containers of a Compose project hang below it, every other container below its environment.</text>
+</svg>

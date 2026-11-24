@@ -5,6 +5,30 @@ and a published GitHub release, and that release is what HACS installs. The vers
 `custom_components/arcane/manifest.json` is the one being released; the release workflow
 refuses a tag that disagrees with it or with this file.
 
+## Unreleased
+
+### Fixed
+
+- Home Assistant 2026.8 and newer no longer warn that the integration links devices with
+  the deprecated `via_device` parameter
+  ([#12](https://github.com/ProfessorQuantumUniverse/Arcane-HA/issues/12)), which would
+  have stopped working in 2027.8. Devices are now linked by `via_device_id`, and the
+  environment and project devices are registered before anything that hangs below them.
+  Older Home Assistant versions keep linking the way they did.
+
+### Changed
+
+- Release notes for container updates no longer depend on Arcane alone. When Arcane 3
+  finds none, which is the case for a new image of `latest` that names no version, and
+  always on Arcane 2, the integration reads the releases of the GitHub repository the
+  image labels name itself. An update that skips versions now shows every release since
+  the installed one, and a new image of a moving tag shows the newest release that tag
+  follows. A failed lookup, for example while GitHub's limit for anonymous requests is
+  used up, is tried again the next time the dialog opens.
+- The README is reworked: Arcane is in the HACS default store now, and the page gained
+  diagrams of how the integration works, the devices it creates and where release notes
+  come from.
+
 ## 0.6.0 (2026-11-15)
 
 ### Added
